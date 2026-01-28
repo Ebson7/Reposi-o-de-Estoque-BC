@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X } from 'lucide-react';
+import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X, Building2, Store } from 'lucide-react';
 import { Product, StockRequest, RequestType, UnitType, WhatsAppConfig } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -211,9 +211,15 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                       <p className="font-semibold dark:text-slate-200 text-sm line-clamp-1">{p.produto}</p>
                       <p className="text-[10px] text-blue-600 font-bold uppercase">{p.codigo}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs font-bold text-blue-600">{formatCurrency(p.estoqueMarsil)}</p>
-                      <p className="text-[8px] text-gray-400 uppercase font-bold">Estoque</p>
+                    <div className="flex gap-4 shrink-0">
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-blue-600">{formatCurrency(p.estoqueMarsil)}</p>
+                        <p className="text-[7px] text-gray-400 uppercase font-black">Marsil</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-emerald-600">{formatCurrency(p.estoqueBoraceia)}</p>
+                        <p className="text-[7px] text-gray-400 uppercase font-black">Borac.</p>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -239,6 +245,26 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              
+              {/* Resumo de Estoque no Formulário */}
+              <div className="bg-gray-50 dark:bg-slate-800/50 px-5 py-3 flex justify-around border-b border-gray-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-blue-500" />
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-bold uppercase text-gray-400">Marsil</span>
+                    <span className="text-xs font-black dark:text-slate-200">{formatCurrency(selectedProduct.estoqueMarsil)}</span>
+                  </div>
+                </div>
+                <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-emerald-500" />
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-bold uppercase text-gray-400">Boracéia</span>
+                    <span className="text-xs font-black dark:text-slate-200">{formatCurrency(selectedProduct.estoqueBoraceia)}</span>
+                  </div>
+                </div>
+              </div>
+
               <form onSubmit={addToDraft} className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>

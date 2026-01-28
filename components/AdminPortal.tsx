@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Upload, ListChecks, Database, FileText, CheckCircle, XCircle, Trash2, Users, Download, UserPlus, X, MessageSquare, Phone } from 'lucide-react';
+import { Upload, ListChecks, Database, FileText, CheckCircle, XCircle, Trash2, Users, Download, UserPlus, X, MessageSquare, Phone, Link2, Copy, Check } from 'lucide-react';
 import { Product, StockRequest, AppState, WhatsAppConfig } from '../types';
 import { StatsCard } from './StatsCard';
 
@@ -25,6 +25,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 }) => {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [newVendedor, setNewVendedor] = useState('');
+  const [copiedLink, setCopiedLink] = useState<'admin' | 'vendedor' | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,6 +73,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
+  const copyLink = (type: 'admin' | 'vendedor') => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = `${baseUrl}?portal=${type}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedLink(type);
+      setTimeout(() => setCopiedLink(null), 2000);
+    });
+  };
+
   const exportToCSV = () => {
     if (appState.requests.length === 0) return;
     const headers = ['ID', 'Solicitante', 'Produto', 'Codigo', 'Quantidade', 'Unidade', 'Tipo', 'Data', 'Status'];
@@ -100,6 +110,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Left Column: Configs */}
         <div className="lg:col-span-1 space-y-6">
+          {/* Quick Links */}
+          <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
+            <h3 className="text-base sm:text-lg font-bold mb-5 flex items-center gap-2 dark:text-white">
+              <Link2 className="w-5 h-5 text-blue-500" />
+              Links de Acesso
+            </h3>
+            <div className="space-y-3">
+              <button 
+                onClick={() => copyLink('vendedor')}
+                className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-all group"
+              >
+                <div className="text-left">
+                  <p className="text-xs font-bold dark:text-white">Link Vendedor</p>
+                  <p className="text-[9px] text-gray-400 uppercase font-black">Enviar para a equipe</p>
+                </div>
+                {copiedLink === 'vendedor' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />}
+              </button>
+              
+              <button 
+                onClick={() => copyLink('admin')}
+                className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-all group"
+              >
+                <div className="text-left">
+                  <p className="text-xs font-bold dark:text-white">Link Administrativo</p>
+                  <p className="text-[9px] text-gray-400 uppercase font-black">Acesso restrito</p>
+                </div>
+                {copiedLink === 'admin' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />}
+              </button>
+            </div>
+          </div>
+
           {/* WhatsApp Config */}
           <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
             <h3 className="text-base sm:text-lg font-bold mb-5 flex items-center gap-2 dark:text-white">
