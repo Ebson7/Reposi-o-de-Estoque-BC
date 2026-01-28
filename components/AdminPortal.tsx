@@ -40,16 +40,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           keys.some(s => k.trim().toLowerCase() === s.toLowerCase()) ||
           keys.some(s => k.trim().toLowerCase().includes(s.toLowerCase()))
         );
-        return key ? row[key] : '';
+        return key ? String(row[key]).trim() : '';
       };
 
       return {
         id: `p-${i}-${Date.now()}`,
         fornecedor: findVal(['Fornecedor', 'Forn', 'Marca']),
-        codigo: String(findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item'])),
+        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo']),
         situacao: findVal(['Situação', 'Status', 'Sit', 'Disponibilidade']),
         comprador: findVal(['Comprador', 'Responsável', 'Buyer']),
-        produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc']),
+        produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc', 'produto']),
         sabor: '',
         embalagem: '',
         estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz'])) || 0,

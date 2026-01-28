@@ -47,7 +47,31 @@ const App: React.FC = () => {
     };
   });
 
-  // Efeito de inicialização com Auto-Sync via URL se presente
+  const mapCSVData = (data: any[]) => {
+    return data.map((row: any, i: number) => {
+      const findVal = (keys: string[]) => {
+        const key = Object.keys(row).find(k => 
+          keys.some(s => k.trim().toLowerCase() === s.toLowerCase()) ||
+          keys.some(s => k.trim().toLowerCase().includes(s.toLowerCase()))
+        );
+        return key ? String(row[key]).trim() : '';
+      };
+
+      return {
+        id: `p-${i}-${Date.now()}`,
+        fornecedor: findVal(['Fornecedor', 'Forn', 'Marca', 'Fabricante']),
+        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo', 'ID', 'Referência']),
+        situacao: findVal(['Situação', 'Status', 'Sit', 'Disponibilidade']),
+        comprador: findVal(['Comprador', 'Responsável', 'Buyer']),
+        produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc', 'produto']),
+        sabor: '',
+        embalagem: '',
+        estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz'])) || 0,
+        estoqueBoraceia: parseInt(findVal(['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia'])) || 0,
+      };
+    }).filter(p => p.produto && p.produto !== '');
+  };
+
   useEffect(() => {
     const initApp = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -60,25 +84,7 @@ const App: React.FC = () => {
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
-            const mapped = results.data.map((row: any, i: number) => {
-              const findVal = (keys: string[]) => {
-                const key = Object.keys(row).find(k => keys.some(s => k.toLowerCase().includes(s.toLowerCase())));
-                return key ? row[key] : '';
-              };
-              return {
-                id: `p-${i}-${Date.now()}`,
-                fornecedor: findVal(['fornecedor', 'forn']),
-                codigo: String(findVal(['código', 'codigo', 'cod'])),
-                situacao: findVal(['situação', 'situacao', 'status']),
-                comprador: findVal(['comprador']),
-                produto: findVal(['produto', 'descrição', 'desc']),
-                sabor: '',
-                embalagem: '',
-                estoqueMarsil: parseInt(findVal(['marsil', 'sp'])) || 0,
-                estoqueBoraceia: parseInt(findVal(['boraceia', 'boracéia', 'bor'])) || 0,
-              };
-            }).filter((p: any) => p.produto !== '');
-            
+            const mapped = mapCSVData(results.data);
             setAppState(prev => ({ ...prev, products: mapped }));
             setIsLoading(false);
           },
