@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
-// Added Info to the lucide-react imports
-import { Upload, Database, FileText, CheckCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Share2, Copy, Check, Info } from 'lucide-react';
+import { Upload, Database, FileText, CheckCircle, XCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Info, Clock, Check, Trash2, Share2 } from 'lucide-react';
 import { Product, StockRequest, AppState, WhatsAppConfig } from '../types';
 import { StatsCard } from './StatsCard';
 import Papa from 'papaparse';
@@ -16,100 +15,262 @@ interface AdminPortalProps {
   onClearRequests: () => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ appState, onUploadData }) => {
-  const [syncUrl, setSyncUrl] = useState(() => localStorage.getItem('marsil_sync_url') || '');
+export const AdminPortal: React.FC<AdminPortalProps> = ({ 
+  appState, 
+  onUploadData, 
+  onAddVendedor,
+  onRemoveVendedor,
+  onUpdateWhatsApp,
+  onUpdateRequestStatus,
+  onClearRequests
+}) => {
+  const [uploadStatus, setUploadStatus] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
+  const [newVendedor, setNewVendedor] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncUrl, setSyncUrl] = useState(() => localStorage.getItem('marsil_sync_url') || '');
+  const [waNumber, setWaNumber] = useState(appState.whatsappConfig.phoneNumber);
   const [copied, setCopied] = useState(false);
 
-  const handleSync = async () => {
+  const mapData = (data: any[]) => {
+    return data.map((row: any, i: number) => {
+      const findVal = (keys: string[]) => {
+        const key = Object.keys(row).find(k => keys.some(s => k.toLowerCase().includes(s.toLowerCase())));
+        return key ? row[key] : '';
+      };
+
+      return {
+        id: `p-${i}-${Date.now()}`,
+        fornecedor: findVal(['fornecedor', 'forn']),
+        codigo: String(findVal(['código', 'codigo', 'cod'])),
+        situacao: findVal(['situação', 'situacao', 'status']),
+        comprador: findVal(['comprador']),
+        produto: findVal(['produto', 'descrição', 'desc']),
+        sabor: '',
+        embalagem: '',
+        estoqueMarsil: parseInt(findVal(['marsil', 'sp'])) || 0,
+        estoqueBoraceia: parseInt(findVal(['boraceia', 'boracéia', 'bor'])) || 0,
+      };
+    }).filter(p => p.produto && p.produto !== '');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadStatus({ message: 'Lendo arquivo...', type: 'info' });
+    
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const mapped = mapData(results.data);
+        onUploadData(mapped);
+        setUploadStatus({ message: `Sucesso! ${mapped.length} itens carregados.`, type: 'success' });
+        setTimeout(() => setUploadStatus(null), 5000);
+      }
+    });
+  };
+
+  const handleSyncFromUrl = async () => {
     if (!syncUrl) return;
     setIsSyncing(true);
+    setUploadStatus({ message: 'Sincronizando via link...', type: 'info' });
     localStorage.setItem('marsil_sync_url', syncUrl);
-    
+
     Papa.parse(syncUrl, {
       download: true,
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const mapped = results.data.map((row: any, i: number) => ({
-          id: `p-${i}`,
-          fornecedor: row['Fornecedor'] || 'N/D',
-          codigo: String(row['Código'] || '0'),
-          situacao: row['Situação'] || '',
-          comprador: row['Comprador'] || '',
-          produto: row['Produto'] || 'Sem nome',
-          sabor: '',
-          embalagem: '',
-          estoqueMarsil: parseInt(row['Marsil']) || 0,
-          estoqueBoraceia: parseInt(row['Boraceia']) || 0,
-        })).filter((p: any) => p.produto !== 'Sem nome');
-        
+        const mapped = mapData(results.data);
         onUploadData(mapped);
-        localStorage.setItem('marsil_local_products', JSON.stringify(mapped));
+        setUploadStatus({ message: `Sincronizado! ${mapped.length} itens atualizados.`, type: 'success' });
+        setIsSyncing(false);
+        setTimeout(() => setUploadStatus(null), 5000);
+      },
+      error: () => {
+        setUploadStatus({ message: 'Erro ao conectar. Verifique o link CSV.', type: 'error' });
         setIsSyncing(false);
       }
     });
   };
 
-  const generateShareLink = () => {
+  const handleGenerateShareLink = () => {
+    if (!syncUrl) return;
     const baseUrl = window.location.origin + window.location.pathname;
     const shareUrl = `${baseUrl}?s=${encodeURIComponent(syncUrl)}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 3000);
     });
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in">
+    <div className="space-y-8 max-w-6xl w-full mx-auto pb-12 animate-in fade-in">
+      {/* Resumo de Operações */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard label="Produtos" value={appState.products.length} icon={<Database className="w-4 h-4" />} color="bg-blue-600" />
-        <StatsCard label="Equipe" value={appState.vendedores.length} icon={<Users className="w-4 h-4" />} color="bg-emerald-600" />
+        <StatsCard label="Itens de Estoque" value={appState.products.length} icon={<Database className="w-4 h-4" />} color="bg-blue-600" />
+        <StatsCard label="Vendedores" value={appState.vendedores.length} icon={<Users className="w-4 h-4" />} color="bg-emerald-600" />
+        <StatsCard label="Solicitações" value={appState.requests.length} icon={<FileText className="w-4 h-4" />} color="bg-purple-600" />
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 flex items-center gap-3">
+          <Info className="w-5 h-5 text-blue-500 shrink-0" />
+          <p className="text-[10px] font-black uppercase text-gray-400 leading-tight">Os dados são armazenados localmente e sincronizados sob demanda.</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800">
-          <h3 className="text-sm font-black mb-4 flex items-center gap-2 uppercase tracking-widest">
-            <Globe className="w-4 h-4 text-blue-600" /> Fonte de Dados (Google Sheets)
-          </h3>
-          <p className="text-[10px] text-gray-400 font-bold uppercase mb-4">Publique sua planilha como CSV e cole o link abaixo.</p>
-          <div className="space-y-4">
-            <input 
-              type="url" 
-              placeholder="Link do CSV Público..." 
-              className="w-full px-4 py-4 rounded-2xl border bg-gray-50 dark:bg-slate-800 outline-none text-xs"
-              value={syncUrl}
-              onChange={(e) => setSyncUrl(e.target.value)}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={handleSync}
-                className="bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase shadow-lg shadow-blue-100"
-              >
-                {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                Sincronizar
-              </button>
-              <button 
-                onClick={generateShareLink}
-                disabled={!syncUrl}
-                className="bg-emerald-600 disabled:opacity-50 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase shadow-lg shadow-emerald-100"
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                {copied ? 'Link Copiado!' : 'Gerar Link'}
-              </button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Painel Lateral de Configurações */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+            <h3 className="text-sm font-black mb-4 flex items-center gap-2 dark:text-white uppercase tracking-wider">
+              <RefreshCw className="w-4 h-4 text-emerald-600" /> Fonte Cloud
+            </h3>
+            <div className="space-y-3">
+              <p className="text-[9px] text-gray-400 font-bold uppercase mb-2">Google Sheets (CSV)</p>
+              <input 
+                type="url" 
+                placeholder="https://docs.google.com/..." 
+                className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-[11px] outline-none transition-all focus:ring-2 focus:ring-emerald-500/20"
+                value={syncUrl}
+                onChange={(e) => setSyncUrl(e.target.value)}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleSyncFromUrl} disabled={isSyncing} className="bg-emerald-600 text-white font-black py-3.5 rounded-xl text-[9px] uppercase flex items-center justify-center gap-1 shadow-lg shadow-emerald-500/10 hover:brightness-110 active:scale-95 transition-all">
+                  {isSyncing ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  Sincronizar
+                </button>
+                <button onClick={handleGenerateShareLink} disabled={!syncUrl} className="bg-blue-600 text-white font-black py-3.5 rounded-xl text-[9px] uppercase flex items-center justify-center gap-1 shadow-lg shadow-blue-500/10 hover:brightness-110 active:scale-95 transition-all">
+                  {copied ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+                  {copied ? 'Copiado!' : 'Gerar Link'}
+                </button>
+              </div>
             </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+            <h3 className="text-sm font-black mb-4 flex items-center gap-2 dark:text-white uppercase tracking-wider">
+              <Upload className="w-4 h-4 text-blue-600" /> Upload de Arquivo
+            </h3>
+            <label className="border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer border-blue-100 dark:border-slate-800 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all group">
+              <ArrowDownToLine className="w-6 h-6 text-blue-300 group-hover:text-blue-500 mb-2 transition-transform group-hover:translate-y-1" />
+              <p className="text-[9px] text-blue-600 font-black uppercase">Importar .CSV Local</p>
+              <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
+            </label>
+            {uploadStatus && (
+              <div className={`mt-4 p-3 rounded-xl text-[10px] font-bold animate-in slide-in-from-top-2 ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                {uploadStatus.message}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800">
+            <h3 className="text-sm font-black mb-4 flex items-center gap-2 dark:text-white uppercase tracking-wider">
+              <Phone className="w-4 h-4 text-blue-500" /> WhatsApp Destino
+            </h3>
+            <p className="text-[9px] text-gray-400 font-bold uppercase mb-2">Pedidos serão enviados para:</p>
+            <input 
+              type="text" 
+              placeholder="Ex: 5511999999999" 
+              className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-xs outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              value={waNumber}
+              onChange={(e) => setWaNumber(e.target.value)}
+              onBlur={() => onUpdateWhatsApp({ enabled: true, phoneNumber: waNumber })}
+            />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 flex flex-col items-center justify-center text-center">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full mb-4">
-            <Info className="w-8 h-8 text-blue-600" />
+        {/* Histórico e Gestão de Vendedores */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Tabela de Solicitações */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden">
+            <div className="p-6 border-b border-gray-50 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="text-sm font-black dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-500" /> Solicitações Recentes
+              </h3>
+              {appState.requests.length > 0 && (
+                <button onClick={onClearRequests} className="text-[9px] font-black text-red-500 uppercase hover:underline flex items-center gap-1">
+                  <Trash2 className="w-3 h-3" /> Limpar Tudo
+                </button>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              {appState.requests.length === 0 ? (
+                <div className="py-20 text-center opacity-30 flex flex-col items-center">
+                  <Clock className="w-12 h-12 mb-4" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Nenhuma solicitação no histórico.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50 dark:bg-slate-800/50">
+                    <tr>
+                      <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Solicitante</th>
+                      <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Produto</th>
+                      <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Qtd</th>
+                      <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase">Status</th>
+                      <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                    {appState.requests.map(req => (
+                      <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-black dark:text-white uppercase">{req.solicitante}</p>
+                          <p className="text-[8px] text-gray-400 font-bold">{new Date(req.dataSolicitacao).toLocaleDateString()}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-bold dark:text-slate-300 line-clamp-1">{req.productName}</p>
+                          <span className="text-[8px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-1 rounded font-black uppercase">{req.tipo}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-black dark:text-white">{req.quantidade} <span className="text-[9px] text-gray-400">{req.unidade === 'Caixa' ? 'CX' : 'UN'}</span></p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-full ${
+                            req.status === 'Pendente' ? 'bg-amber-100 text-amber-700' : 
+                            req.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center gap-2">
+                            {req.status === 'Pendente' && (
+                              <>
+                                <button onClick={() => onUpdateRequestStatus(req.id, 'Aprovado')} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Check className="w-3 h-3" /></button>
+                                <button onClick={() => onUpdateRequestStatus(req.id, 'Recusado')} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"><X className="w-3 h-3" /></button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-          <h4 className="text-sm font-black uppercase mb-2">Instruções de Sincronização</h4>
-          <p className="text-[10px] text-gray-500 font-bold max-w-xs leading-relaxed">
-            Ao gerar o link e enviar para os vendedores, o aplicativo deles se conectará automaticamente à sua planilha. 
-            Todas as manhãs, o estoque será atualizado sozinho ao abrirem o app.
-          </p>
+
+          {/* Gestão de Equipe */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden">
+            <div className="p-6 border-b border-gray-50 dark:border-slate-800">
+              <h3 className="text-sm font-black dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-500" /> Equipe de Vendas
+              </h3>
+            </div>
+            <div className="p-6 space-y-5">
+              <form onSubmit={(e) => { e.preventDefault(); if (newVendedor) { onAddVendedor(newVendedor); setNewVendedor(''); } }} className="flex gap-3">
+                <input type="text" placeholder="Nome do novo vendedor..." value={newVendedor} onChange={e => setNewVendedor(e.target.value)} className="flex-grow px-4 py-3.5 text-xs rounded-2xl bg-gray-50 dark:bg-slate-800 border-2 border-transparent focus:border-emerald-500 outline-none dark:text-white font-bold transition-all" />
+                <button type="submit" className="px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-lg shadow-emerald-500/10 active:scale-95 transition-all"><UserPlus className="w-5 h-5" /></button>
+              </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {appState.vendedores.map(v => (
+                  <div key={v} className="group flex items-center justify-between p-3.5 bg-gray-50 dark:bg-slate-800/40 rounded-2xl border border-transparent hover:border-blue-100 dark:hover:border-slate-700 transition-all">
+                    <span className="text-[11px] font-black dark:text-slate-300 uppercase truncate">{v}</span>
+                    <button onClick={() => onRemoveVendedor(v)} className="text-gray-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
