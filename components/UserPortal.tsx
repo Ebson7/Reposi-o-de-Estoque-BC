@@ -57,6 +57,22 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
     });
   };
 
+  // Função para copiar lista formatada conforme os labels e template solicitados
+  const handleCopyFormattedList = () => {
+    const dateStr = new Date().toLocaleDateString('pt-BR');
+    const itemsStr = myRequests.map(r => `QTD: ${r.quantidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}`).join('\n');
+    
+    const fullText = `📦 PEDIDO MARSIL
+📅 Data do Pedido: ${dateStr}
+👤 Vendedor: ${solicitante || 'Não Identificado'}
+
+${itemsStr}
+
+Pedido Extra Boracéia`;
+    
+    handleCopy(fullText, 'hist-all');
+  };
+
   const handleSendRequest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected || !solicitante) return;
@@ -123,7 +139,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                 <h2 className="text-base font-black flex items-center gap-2 uppercase tracking-widest dark:text-white mb-1">
                   <Filter className="w-5 h-5 text-blue-600" /> Pesquisa Avançada
                 </h2>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Busca refinada por Código, Descrição ou Fabricante</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Busca por Código, Descrição ou Fabricante</p>
               </div>
               {hasFilters && (
                 <button onClick={() => { setFilterCodigo(''); setFilterDescricao(''); setFilterFornecedor(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline flex items-center gap-1 pb-1">
@@ -225,10 +241,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
             </div>
             <div className="flex gap-2">
               <button 
-                onClick={() => {
-                  const text = myRequests.map(r => `${r.productCode} | ${r.productSabor ? r.productSabor + ' | ' : ''}${r.quantidade} ${r.unidade} | ${r.productName}`).join('\n');
-                  handleCopy(text, 'hist-all');
-                }}
+                onClick={handleCopyFormattedList}
                 className="text-[9px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm"
               >
                 {copySuccess === 'hist-all' ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
@@ -305,7 +318,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
         </div>
       )}
 
-      {/* Modal de Solicitação - Botão Aumentado e sem WhatsApp */}
+      {/* Modal de Solicitação - Botão Aumentado significativamente conforme solicitado */}
       {selected && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
@@ -358,18 +371,18 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                 </div>
               </div>
 
-              {/* Botão Aumentado conforme solicitado (py-6 e text-sm) */}
+              {/* Botão Aumentado para o Máximo conforme solicitado */}
               <button 
                 disabled={isSubmitting || !solicitante} 
                 type="submit" 
-                className={`w-full font-black py-6 rounded-3xl flex items-center justify-center gap-3 uppercase text-sm tracking-widest shadow-2xl active:scale-95 transition-all mt-6 ${requestStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                className={`w-full font-black py-8 rounded-[2rem] flex items-center justify-center gap-4 uppercase text-base tracking-[0.15em] shadow-2xl active:scale-95 transition-all mt-6 ${requestStatus === 'success' ? 'bg-emerald-500 text-white ring-4 ring-emerald-500/20' : 'bg-blue-600 hover:bg-blue-700 text-white ring-4 ring-blue-600/10'}`}
               >
                 {isSubmitting ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <RefreshCw className="w-6 h-6 animate-spin" />
                 ) : requestStatus === 'success' ? (
-                  <><CheckCircle2 className="w-6 h-6" /> Adicionado com Sucesso!</>
+                  <><CheckCircle2 className="w-7 h-7" /> ADICIONADO!</>
                 ) : (
-                  <><PlusCircle className="w-6 h-6" /> Adicionar ao meu pedido</>
+                  <><PlusCircle className="w-7 h-7" /> ADICIONAR AO MEU PEDIDO</>
                 )}
               </button>
             </form>

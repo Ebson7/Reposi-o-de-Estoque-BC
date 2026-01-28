@@ -45,13 +45,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
       return {
         id: `p-${i}-${Date.now()}`,
-        fornecedor: findVal(['Fornecedor', 'Forn', 'Marca']),
-        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo']),
+        fornecedor: findVal(['Fornecedor', 'Forn', 'Marca', 'Fabricante']),
+        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo', 'ID', 'Referência']),
         situacao: findVal(['Situação', 'Status', 'Sit', 'Disponibilidade']),
         comprador: findVal(['Comprador', 'Responsável', 'Buyer']),
         produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc', 'produto']),
-        sabor: '',
-        embalagem: '',
+        sabor: findVal(['Sabor', 'Gosto', 'Flavor', 'Variante']),
+        embalagem: findVal(['Embalagem', 'Emb', 'Pack']),
         estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz'])) || 0,
         estoqueBoraceia: parseInt(findVal(['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia'])) || 0,
       };
@@ -138,7 +138,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         <StatsCard label="Solicitações" value={appState.requests.length} icon={<FileText className="w-4 h-4" />} color="bg-purple-600" />
         <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 flex items-center gap-3">
           <Info className="w-5 h-5 text-blue-500 shrink-0" />
-          <p className="text-[10px] font-black uppercase text-gray-400 leading-tight">Configurações salvas localmente no seu navegador.</p>
+          <p className="text-[10px] font-black uppercase text-gray-400 leading-tight">Painel administrativo: Itens carregados são compartilhados com todos.</p>
         </div>
       </div>
 
@@ -242,7 +242,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <thead className="bg-gray-50/50 dark:bg-slate-800/50">
                     <tr>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Solicitante</th>
-                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Produto</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Produto / Sabor</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Qtd</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Status</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
@@ -257,7 +257,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold dark:text-slate-300 line-clamp-1">{req.productName}</p>
-                          <span className="text-[8px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-1.5 py-0.5 rounded font-black uppercase">{req.tipo}</span>
+                          <div className="flex gap-2 items-center">
+                            <span className="text-[8px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-1.5 py-0.5 rounded font-black uppercase">{req.tipo}</span>
+                            {req.productSabor && <span className="text-[8px] bg-pink-50 dark:bg-pink-900/30 text-pink-500 px-1.5 py-0.5 rounded font-black uppercase">{req.productSabor}</span>}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-black dark:text-white">{req.quantidade} <span className="text-[9px] text-gray-400">{req.unidade === 'Caixa' ? 'CX' : 'UN'}</span></p>
@@ -274,8 +277,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         <td className="px-6 py-4 text-center">
                           {req.status === 'Pendente' && (
                             <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => onUpdateRequestStatus(req.id, 'Aprovado')} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all"><Check className="w-3 h-3" /></button>
-                              <button onClick={() => onUpdateRequestStatus(req.id, 'Recusado')} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"><X className="w-3 h-3" /></button>
+                              <button onClick={() => onUpdateRequestStatus(req.id, 'Aprovado')} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all" title="Aprovar"><Check className="w-3 h-3" /></button>
+                              <button onClick={() => onUpdateRequestStatus(req.id, 'Recusado')} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all" title="Recusar"><X className="w-3 h-3" /></button>
                             </div>
                           )}
                         </td>

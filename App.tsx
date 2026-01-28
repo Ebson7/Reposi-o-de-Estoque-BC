@@ -64,8 +64,8 @@ const App: React.FC = () => {
         situacao: findVal(['Situação', 'Status', 'Sit', 'Disponibilidade']),
         comprador: findVal(['Comprador', 'Responsável', 'Buyer']),
         produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc', 'produto']),
-        sabor: '',
-        embalagem: '',
+        sabor: findVal(['Sabor', 'Gosto', 'Flavor', 'Variante']),
+        embalagem: findVal(['Embalagem', 'Emb', 'Pack']),
         estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz'])) || 0,
         estoqueBoraceia: parseInt(findVal(['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia'])) || 0,
       };
