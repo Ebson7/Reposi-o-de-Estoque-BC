@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X, Building2, Store } from 'lucide-react';
+import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X, Building2, Store, Info } from 'lucide-react';
 import { Product, StockRequest, RequestType, UnitType, WhatsAppConfig } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -60,7 +60,11 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
 
   const addToDraft = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProduct || formData.quantidade <= 0) {
+    if (!selectedProduct) {
+      setMessage({ type: 'error', text: 'Selecione um produto primeiro.' });
+      return;
+    }
+    if (formData.quantidade <= 0) {
       setMessage({ type: 'error', text: 'Informe a quantidade.' });
       return;
     }
@@ -175,7 +179,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
         <div className="lg:col-span-3 space-y-4 sm:space-y-6 order-1 lg:order-1">
           <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
             <h2 className="text-base sm:text-lg font-bold mb-4 flex items-center gap-2 dark:text-white">
-              <Filter className="w-5 h-5 text-blue-600" /> Adicionar Produto
+              <Search className="w-5 h-5 text-blue-600" /> Pesquisar Produto
             </h2>
             <div className="space-y-3">
               <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
@@ -203,10 +207,10 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
               />
             </div>
 
-            {hasSearch && filteredProducts.length > 0 && !selectedProduct && (
+            {hasSearch && filteredProducts.length > 0 && (
               <div className="mt-4 max-h-[350px] sm:max-h-[300px] overflow-y-auto border border-gray-50 dark:border-slate-800 rounded-xl divide-y dark:divide-slate-800 custom-scrollbar shadow-inner">
                 {currentItems.map(p => (
-                  <button key={p.id} onClick={() => setSelectedProduct(p)} className="w-full text-left p-4 hover:bg-blue-50 dark:hover:bg-slate-800/80 transition-colors flex justify-between items-center group active:bg-blue-100">
+                  <button key={p.id} onClick={() => setSelectedProduct(p)} className={`w-full text-left p-4 hover:bg-blue-50 dark:hover:bg-slate-800/80 transition-colors flex justify-between items-center group active:bg-blue-100 ${selectedProduct?.id === p.id ? 'bg-blue-50 dark:bg-slate-800 ring-2 ring-blue-500 ring-inset' : ''}`}>
                     <div className="flex-grow pr-2">
                       <p className="font-semibold dark:text-slate-200 text-sm line-clamp-1">{p.produto}</p>
                       <p className="text-[10px] text-blue-600 font-bold uppercase">{p.codigo}</p>
@@ -227,75 +231,89 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
             )}
             
             {hasSearch && filteredProducts.length === 0 && (
-              <div className="mt-4 p-8 text-center bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
-                <Search className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Nenhum item encontrado</p>
+              <div className="mt-4 p-6 text-center bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
+                <AlertCircle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
+                <p className="text-sm text-gray-400 font-medium">Nenhum item encontrado.</p>
+                <p className="text-[10px] text-red-500 font-bold uppercase mt-2 tracking-tight">
+                  Se a pesquisa não retornar nada é por que o estoque é 0 na Marsil SP
+                </p>
               </div>
             )}
           </div>
 
-          {selectedProduct && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border-2 border-blue-500 overflow-hidden animate-in fade-in zoom-in-95 duration-200 sticky bottom-4 z-40 lg:relative lg:bottom-0">
-              <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-bold uppercase opacity-75">Selecionado:</span>
-                  <h3 className="text-sm font-bold truncate pr-4">{selectedProduct.produto}</h3>
-                </div>
+          {/* Form Section - Always Visible */}
+          <div className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border-2 transition-all duration-300 overflow-hidden ${selectedProduct ? 'border-blue-500 shadow-xl' : 'border-gray-100 dark:border-slate-800 opacity-90'}`}>
+            <div className={`p-4 text-white flex justify-between items-center transition-colors duration-300 ${selectedProduct ? 'bg-blue-600' : 'bg-gray-400 dark:bg-slate-800'}`}>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-bold uppercase opacity-75">
+                  {selectedProduct ? 'Produto Selecionado:' : 'Aguardando seleção:'}
+                </span>
+                <h3 className="text-sm font-bold truncate pr-4">
+                  {selectedProduct ? selectedProduct.produto : 'Escolha um item na busca acima'}
+                </h3>
+              </div>
+              {selectedProduct && (
                 <button onClick={() => setSelectedProduct(null)} className="hover:bg-blue-700 p-2 rounded-xl transition-colors">
                   <X className="w-5 h-5" />
                 </button>
-              </div>
-              
-              {/* Resumo de Estoque no Formulário */}
-              <div className="bg-gray-50 dark:bg-slate-800/50 px-5 py-3 flex justify-around border-b border-gray-100 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-blue-500" />
-                  <div className="flex flex-col">
-                    <span className="text-[8px] font-bold uppercase text-gray-400">Marsil</span>
-                    <span className="text-xs font-black dark:text-slate-200">{formatCurrency(selectedProduct.estoqueMarsil)}</span>
-                  </div>
-                </div>
-                <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-500" />
-                  <div className="flex flex-col">
-                    <span className="text-[8px] font-bold uppercase text-gray-400">Boracéia</span>
-                    <span className="text-xs font-black dark:text-slate-200">{formatCurrency(selectedProduct.estoqueBoraceia)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <form onSubmit={addToDraft} className="p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1 block mb-1">Qtd.</label>
-                    <input 
-                      type="number" 
-                      required 
-                      min="1" 
-                      className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500" 
-                      value={formData.quantidade || ''} 
-                      onChange={(e) => setFormData({...formData, quantidade: parseInt(e.target.value) || 0})} 
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1 block mb-1">Unidade</label>
-                    <select 
-                      className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none" 
-                      value={formData.unidade} 
-                      onChange={(e) => setFormData({...formData, unidade: e.target.value as UnitType})}
-                    >
-                      <option value="Unidade">Unidade</option>
-                      <option value="Caixa">Caixa</option>
-                    </select>
-                  </div>
-                </div>
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-sm shadow-xl active:scale-95 transition-all">
-                  <ListPlus className="w-5 h-5" /> Adicionar à Lista
-                </button>
-              </form>
+              )}
             </div>
-          )}
+            
+            {/* Resumo de Estoque */}
+            <div className="bg-gray-50 dark:bg-slate-800/50 px-5 py-3 flex justify-around border-b border-gray-100 dark:border-slate-800">
+              <div className={`flex items-center gap-2 transition-opacity ${selectedProduct ? 'opacity-100' : 'opacity-30'}`}>
+                <Building2 className="w-4 h-4 text-blue-500" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold uppercase text-gray-400">Marsil</span>
+                  <span className="text-xs font-black dark:text-slate-200">{selectedProduct ? formatCurrency(selectedProduct.estoqueMarsil) : '-'}</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
+              <div className={`flex items-center gap-2 transition-opacity ${selectedProduct ? 'opacity-100' : 'opacity-30'}`}>
+                <Store className="w-4 h-4 text-emerald-500" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-bold uppercase text-gray-400">Boracéia</span>
+                  <span className="text-xs font-black dark:text-slate-200">{selectedProduct ? formatCurrency(selectedProduct.estoqueBoraceia) : '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={addToDraft} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1 block mb-1">Qtd.</label>
+                  <input 
+                    type="number" 
+                    disabled={!selectedProduct}
+                    required 
+                    min="1" 
+                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!selectedProduct ? 'cursor-not-allowed' : ''}`} 
+                    value={formData.quantidade || ''} 
+                    onChange={(e) => setFormData({...formData, quantidade: parseInt(e.target.value) || 0})} 
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1 block mb-1">Unidade</label>
+                  <select 
+                    disabled={!selectedProduct}
+                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none transition-all ${!selectedProduct ? 'cursor-not-allowed' : ''}`} 
+                    value={formData.unidade} 
+                    onChange={(e) => setFormData({...formData, unidade: e.target.value as UnitType})}
+                  >
+                    <option value="Unidade">Unidade</option>
+                    <option value="Caixa">Caixa</option>
+                  </select>
+                </div>
+              </div>
+              <button 
+                type="submit" 
+                disabled={!selectedProduct}
+                className={`w-full font-bold py-4 rounded-2xl flex items-center justify-center gap-2 text-sm shadow-xl transition-all active:scale-95 ${selectedProduct ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 dark:bg-slate-800 text-gray-400 cursor-not-allowed shadow-none'}`}
+              >
+                <ListPlus className="w-5 h-5" /> Adicionar à Lista
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Right: Cart/List Review */}
