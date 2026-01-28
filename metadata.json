@@ -1,0 +1,5 @@
+{
+  "name": "Sistema de Gestão de Estoque Marsil-Boraceia",
+  "description": "Uma plataforma web para consulta de estoque e solicitações de transferência entre unidades, com suporte a upload de planilhas e controle administrativo.",
+  "requestFramePermissions": []
+}
