@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X, Building2, Store, Info } from 'lucide-react';
+import { Search, Send, AlertCircle, CheckCircle2, UserCircle, Package, Truck, Filter, Layers, MessageCircle, Trash2, ListPlus, ShoppingCart, Copy, ClipboardCheck, Calendar, X, Building2, Store, Info, AlertTriangle } from 'lucide-react';
 import { Product, StockRequest, RequestType, UnitType, WhatsAppConfig } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -39,7 +39,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
-  // Current Date for UI and Message
   const currentDateFormatted = useMemo(() => new Date().toLocaleDateString('pt-BR'), []);
 
   const hasSearch = useMemo(() => filterCodigo.length >= 2 || filterFornecedor.length >= 3 || filterDescricao.length >= 3, [filterCodigo, filterFornecedor, filterDescricao]);
@@ -68,12 +67,10 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
       setMessage({ type: 'error', text: 'Informe a quantidade.' });
       return;
     }
-
     if (draftItems.length >= 10) {
       setMessage({ type: 'error', text: 'Limite de 10 itens atingido.' });
       return;
     }
-
     setDraftItems([...draftItems, { product: selectedProduct, ...formData }]);
     setSelectedProduct(null);
     setFormData({ ...formData, quantidade: 0, unidade: 'Unidade', tipo: 'Teste' });
@@ -120,13 +117,11 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
       return;
     }
     if (draftItems.length === 0) return;
-
     if (whatsappConfig.enabled && whatsappConfig.phoneNumber) {
       const text = generateMessageText();
       const url = `https://wa.me/${whatsappConfig.phoneNumber}?text=${encodeURIComponent(text)}`;
       window.open(url, '_blank');
     }
-
     draftItems.forEach(item => {
       const fullProductName = item.product.sabor ? `${item.product.produto} - ${item.product.sabor}` : item.product.produto;
       onSubmitRequest({
@@ -139,7 +134,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
         solicitante: solicitante
       });
     });
-
     setDraftItems([]);
     setMessage({ type: 'success', text: 'Enviado!' });
     setTimeout(() => setMessage(null), 3000);
@@ -147,7 +141,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
 
   return (
     <div className="max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 px-2 sm:px-0">
-      {/* Vendedor Selector & Current Date Display */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
         <div className="flex-grow flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-2 text-gray-400 dark:text-slate-500 shrink-0">
@@ -164,7 +157,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
             {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
-        
         <div className="flex items-center gap-3 bg-blue-50/50 dark:bg-blue-900/20 px-4 py-2 sm:py-3 rounded-xl border border-blue-100 dark:border-blue-900/30 shrink-0 self-start sm:self-center">
           <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           <div className="flex flex-col">
@@ -175,7 +167,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
-        {/* Left: Search and Results */}
         <div className="lg:col-span-3 space-y-4 sm:space-y-6 order-1 lg:order-1">
           <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800">
             <h2 className="text-base sm:text-lg font-bold mb-4 flex items-center gap-2 dark:text-white">
@@ -231,24 +222,33 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
             )}
             
             {hasSearch && filteredProducts.length === 0 && (
-              <div className="mt-4 p-6 text-center bg-red-50 dark:bg-red-900/10 rounded-2xl border-2 border-red-200 dark:border-red-900/30 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="bg-red-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-red-200 dark:shadow-none">
-                  <Info className="w-7 h-7 text-white" />
-                </div>
-                <p className="text-red-700 dark:text-red-400 text-sm font-black uppercase tracking-tight mb-2">
-                  Produto Não Encontrado
-                </p>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-red-100 dark:border-red-900/40 shadow-sm">
-                  <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 font-bold leading-relaxed">
-                    Se a pesquisa não retornar nada é porque o estoque é <span className="underline decoration-2 font-black">0 na Marsil SP</span>.
-                  </p>
+              <div className="mt-6 animate-in fade-in zoom-in-95 duration-300">
+                <div className="bg-red-50 dark:bg-red-900/10 border-2 border-red-500 rounded-3xl p-6 shadow-2xl shadow-red-100 dark:shadow-none relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <AlertTriangle className="w-24 h-24 text-red-500 rotate-12" />
+                  </div>
+                  <div className="relative z-10 flex flex-col items-center text-center">
+                    <div className="bg-red-500 p-3 rounded-full mb-4 shadow-lg">
+                      <AlertCircle className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="text-red-600 dark:text-red-400 font-black text-lg uppercase tracking-tight mb-3">
+                      Nenhum Item Encontrado!
+                    </h3>
+                    <div className="bg-white dark:bg-slate-900/80 p-5 rounded-2xl border border-red-100 dark:border-red-900/40 w-full">
+                      <p className="text-sm sm:text-base text-gray-800 dark:text-slate-200 font-bold leading-relaxed">
+                        ⚠️ Atenção: Se a sua pesquisa não retornou nada, é porque o estoque deste produto é <span className="text-red-600 dark:text-red-400 underline decoration-4 underline-offset-4 font-black">ZERO na Marsil SP</span>.
+                      </p>
+                      <p className="mt-3 text-[10px] text-gray-400 uppercase font-black tracking-widest">
+                        Verifique o código ou a descrição digitada.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Form Section - Always Visible */}
-          <div className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border-2 transition-all duration-300 overflow-hidden ${selectedProduct ? 'border-blue-500 shadow-xl' : 'border-gray-100 dark:border-slate-800 opacity-90'}`}>
+          <div className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border-2 transition-all duration-300 overflow-hidden ${selectedProduct ? 'border-blue-500 shadow-xl scale-[1.01]' : 'border-gray-100 dark:border-slate-800 opacity-90'}`}>
             <div className={`p-4 text-white flex justify-between items-center transition-colors duration-300 ${selectedProduct ? 'bg-blue-600' : 'bg-gray-400 dark:bg-slate-800'}`}>
               <div className="flex flex-col">
                 <span className="text-[8px] font-bold uppercase opacity-75">
@@ -265,7 +265,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
               )}
             </div>
             
-            {/* Resumo de Estoque */}
             <div className="bg-gray-50 dark:bg-slate-800/50 px-5 py-3 flex justify-around border-b border-gray-100 dark:border-slate-800">
               <div className={`flex items-center gap-2 transition-opacity ${selectedProduct ? 'opacity-100' : 'opacity-30'}`}>
                 <Building2 className="w-4 h-4 text-blue-500" />
@@ -322,7 +321,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
           </div>
         </div>
 
-        {/* Right: Cart/List Review */}
         <div className="lg:col-span-2 space-y-4 order-2 lg:order-2">
           <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col min-h-[400px]">
             <div className="flex justify-between items-center mb-6">
@@ -377,7 +375,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                   <MessageCircle className="w-5 h-5" />
                   <span className="text-sm">Enviar WhatsApp</span>
                 </button>
-                
                 <button 
                   onClick={handleCopyToClipboard}
                   disabled={draftItems.length === 0 || !solicitante}
@@ -387,13 +384,11 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                   {isCopied ? 'Copiado!' : 'Copiar Pedido'}
                 </button>
               </div>
-              
               {!solicitante && draftItems.length > 0 && (
                 <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/40">
                   <p className="text-[10px] text-red-600 dark:text-red-400 text-center font-black animate-pulse uppercase tracking-tight">⚠️ Selecione seu nome no topo da página!</p>
                 </div>
               )}
-              
               <div className="pt-2">
                  <p className="text-[9px] text-center text-gray-400 dark:text-slate-500 font-bold italic uppercase tracking-widest">Pedido Extra Boracéia</p>
               </div>
