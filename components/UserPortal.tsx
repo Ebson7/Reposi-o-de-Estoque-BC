@@ -186,14 +186,14 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                 <input 
                   type="text" 
                   placeholder="Cód. Item" 
-                  className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" 
                   value={filterCodigo} 
                   onChange={(e) => setFilterCodigo(e.target.value)} 
                 />
                 <input 
                   type="text" 
                   placeholder="Fornecedor" 
-                  className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm" 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" 
                   value={filterFornecedor} 
                   onChange={(e) => setFilterFornecedor(e.target.value)} 
                 />
@@ -201,7 +201,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
               <input 
                 type="text" 
                 placeholder="Nome do produto..." 
-                className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm" 
+                className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" 
                 value={filterDescricao} 
                 onChange={(e) => setFilterDescricao(e.target.value)} 
               />
@@ -212,7 +212,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                 {currentItems.map(p => (
                   <button key={p.id} onClick={() => setSelectedProduct(p)} className={`w-full text-left p-4 hover:bg-blue-50 dark:hover:bg-slate-800/80 transition-colors flex justify-between items-center group active:bg-blue-100 ${selectedProduct?.id === p.id ? 'bg-blue-50 dark:bg-slate-800 ring-2 ring-blue-500 ring-inset' : ''}`}>
                     <div className="flex-grow pr-2">
-                      <p className="font-semibold dark:text-slate-200 text-sm line-clamp-1">{p.produto}</p>
+                      <p className="font-semibold dark:text-slate-200 text-sm line-clamp-1 uppercase">{p.produto}</p>
                       <p className="text-[10px] text-blue-600 font-bold uppercase">{p.codigo}</p>
                     </div>
                     <div className="flex gap-4 shrink-0">
@@ -231,12 +231,18 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
             )}
             
             {hasSearch && filteredProducts.length === 0 && (
-              <div className="mt-4 p-6 text-center bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
-                <AlertCircle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-                <p className="text-sm text-gray-400 font-medium">Nenhum item encontrado.</p>
-                <p className="text-[10px] text-red-500 font-bold uppercase mt-2 tracking-tight">
-                  Se a pesquisa não retornar nada é por que o estoque é 0 na Marsil SP
+              <div className="mt-4 p-6 text-center bg-red-50 dark:bg-red-900/10 rounded-2xl border-2 border-red-200 dark:border-red-900/30 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-red-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-red-200 dark:shadow-none">
+                  <Info className="w-7 h-7 text-white" />
+                </div>
+                <p className="text-red-700 dark:text-red-400 text-sm font-black uppercase tracking-tight mb-2">
+                  Produto Não Encontrado
                 </p>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-red-100 dark:border-red-900/40 shadow-sm">
+                  <p className="text-xs sm:text-sm text-red-600 dark:text-red-400 font-bold leading-relaxed">
+                    Se a pesquisa não retornar nada é porque o estoque é <span className="underline decoration-2 font-black">0 na Marsil SP</span>.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -248,7 +254,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                 <span className="text-[8px] font-bold uppercase opacity-75">
                   {selectedProduct ? 'Produto Selecionado:' : 'Aguardando seleção:'}
                 </span>
-                <h3 className="text-sm font-bold truncate pr-4">
+                <h3 className="text-sm font-bold truncate pr-4 uppercase">
                   {selectedProduct ? selectedProduct.produto : 'Escolha um item na busca acima'}
                 </h3>
               </div>
@@ -287,7 +293,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                     disabled={!selectedProduct}
                     required 
                     min="1" 
-                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!selectedProduct ? 'cursor-not-allowed' : ''}`} 
+                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}`} 
                     value={formData.quantidade || ''} 
                     onChange={(e) => setFormData({...formData, quantidade: parseInt(e.target.value) || 0})} 
                   />
@@ -296,7 +302,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                   <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase ml-1 block mb-1">Unidade</label>
                   <select 
                     disabled={!selectedProduct}
-                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none transition-all ${!selectedProduct ? 'cursor-not-allowed' : ''}`} 
+                    className={`w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 dark:text-white text-base sm:text-sm outline-none focus:ring-2 focus:ring-blue-500 appearance-none transition-all ${!selectedProduct ? 'opacity-50 cursor-not-allowed' : ''}`} 
                     value={formData.unidade} 
                     onChange={(e) => setFormData({...formData, unidade: e.target.value as UnitType})}
                   >
@@ -332,7 +338,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
               {draftItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-300 dark:text-slate-700 opacity-50">
                   <Package className="w-16 h-16 mb-2" />
-                  <p className="text-xs font-bold uppercase tracking-widest">Lista Vazia</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-center px-4">Adicione itens para enviar o pedido</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -340,9 +346,9 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
                     <div key={idx} className="group relative bg-gray-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 transition-all active:scale-[0.98]">
                       <div className="flex justify-between items-start pr-8">
                         <div>
-                          <p className="text-xs font-bold dark:text-slate-200 line-clamp-1">{item.product.produto}</p>
+                          <p className="text-xs font-bold dark:text-slate-200 line-clamp-2 uppercase">{item.product.produto}</p>
                           <p className="text-[10px] text-blue-600 font-bold mt-1.5 flex items-center gap-2">
-                            <span className="bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded uppercase">QTD: {item.quantidade}</span>
+                            <span className="bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded uppercase">QTD: {item.quantidade} {item.unidade}</span>
                             <span className="opacity-50">•</span>
                             <span>Cód: {item.product.codigo}</span>
                           </p>
@@ -383,7 +389,9 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
               </div>
               
               {!solicitante && draftItems.length > 0 && (
-                <p className="text-[10px] text-red-500 text-center font-bold animate-pulse uppercase tracking-tight">⚠️ Por favor, selecione seu nome acima!</p>
+                <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/40">
+                  <p className="text-[10px] text-red-600 dark:text-red-400 text-center font-black animate-pulse uppercase tracking-tight">⚠️ Selecione seu nome no topo da página!</p>
+                </div>
               )}
               
               <div className="pt-2">
