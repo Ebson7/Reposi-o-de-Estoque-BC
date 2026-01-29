@@ -123,7 +123,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const handleGenerateShareLink = () => {
     if (!syncUrl) return;
     const baseUrl = window.location.origin + window.location.pathname;
-    const shareUrl = `${baseUrl}?s=${encodeURIComponent(syncUrl)}`;
+    
+    // Inclui os vendedores no link para garantir que apareçam para quem recebe
+    const vendorsEncoded = encodeURIComponent(JSON.stringify(appState.vendedores));
+    const shareUrl = `${baseUrl}?s=${encodeURIComponent(syncUrl)}&v=${vendorsEncoded}`;
+    
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);

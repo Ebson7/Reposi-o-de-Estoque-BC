@@ -18,6 +18,7 @@ const PASSWORDS = {
   ADMIN: '@adminMarsil2026'
 };
 
+// Lista oficial fornecida pelo usuário via imagem
 const DEFAULT_VENDEDORES = [
   "ADALTON LUIZ",
   "AIRTON DONIZETTI",
@@ -63,10 +64,22 @@ const App: React.FC = () => {
     const savedVendedores = localStorage.getItem(VENDEDORES_KEY);
     const savedRequests = localStorage.getItem(REQUESTS_KEY);
 
+    let finalVendedores = DEFAULT_VENDEDORES;
+    if (savedVendedores) {
+      try {
+        const parsed = JSON.parse(savedVendedores);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          finalVendedores = parsed;
+        }
+      } catch (e) {
+        finalVendedores = DEFAULT_VENDEDORES;
+      }
+    }
+
     return { 
       products: savedProducts ? JSON.parse(savedProducts) : [], 
       requests: savedRequests ? JSON.parse(savedRequests) : [], 
-      vendedores: savedVendedores ? JSON.parse(savedVendedores) : DEFAULT_VENDEDORES,
+      vendedores: finalVendedores,
       whatsappConfig: { enabled: true, phoneNumber: '5511999999999' }
     };
   });
@@ -100,7 +113,23 @@ const App: React.FC = () => {
     const initApp = async () => {
       const params = new URLSearchParams(window.location.search);
       const urlSync = params.get('s');
+      const urlVendors = params.get('v');
       
+      let initialVendedores = appState.vendedores;
+
+      // Se houver vendedores na URL, eles têm prioridade para sincronização
+      if (urlVendors) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(urlVendors));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            initialVendedores = parsed;
+            localStorage.setItem(VENDEDORES_KEY, JSON.stringify(parsed));
+          }
+        } catch (e) {
+          console.error("Erro ao processar vendedores da URL", e);
+        }
+      }
+
       if (urlSync) {
         localStorage.setItem(SYNC_URL_KEY, urlSync);
         Papa.parse(urlSync, {
@@ -109,12 +138,20 @@ const App: React.FC = () => {
           skipEmptyLines: true,
           complete: (results) => {
             const mapped = mapCSVData(results.data);
-            setAppState(prev => ({ ...prev, products: mapped }));
+            setAppState(prev => ({ 
+              ...prev, 
+              products: mapped,
+              vendedores: initialVendedores 
+            }));
             setIsLoading(false);
           },
           error: () => setIsLoading(false)
         });
       } else {
+        // Se não houver link de sincronização, apenas atualiza os vendedores se vieram da URL
+        if (urlVendors) {
+          setAppState(prev => ({ ...prev, vendedores: initialVendedores }));
+        }
         setTimeout(() => setIsLoading(false), 800);
       }
     };
