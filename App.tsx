@@ -18,6 +18,30 @@ const PASSWORDS = {
   ADMIN: '@adminMarsil2026'
 };
 
+const DEFAULT_VENDEDORES = [
+  "ADALTON LUIZ",
+  "AIRTON DONIZETTI",
+  "ANA CAMARGO",
+  "ANA PAULA",
+  "CARLOS ROSEIRO",
+  "DOUGLAS PITELLI",
+  "EDMILSON LEAL",
+  "FERNANDO APARECIDO",
+  "GUSTAVO PAULINO",
+  "JOAO JOSE",
+  "JOAO MANUEL",
+  "LEONARDO APARECIDO",
+  "LUIS ALEXANDRE",
+  "MARCELO SANTOS",
+  "MARCO AURELIO",
+  "NIVALDO NEVES",
+  "ROSIMAR FREITAS",
+  "ROZIMARA SOUZA",
+  "TELMA CRISTINA",
+  "WASHINGTON BELMIRO",
+  "OUTRO"
+];
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'user' | 'admin'>('user');
   const [authRole, setAuthRole] = useState<'none' | 'vendor' | 'admin'>(() => {
@@ -42,7 +66,7 @@ const App: React.FC = () => {
     return { 
       products: savedProducts ? JSON.parse(savedProducts) : [], 
       requests: savedRequests ? JSON.parse(savedRequests) : [], 
-      vendedores: savedVendedores ? JSON.parse(savedVendedores) : ['Vendedor 1', 'Vendedor 2'],
+      vendedores: savedVendedores ? JSON.parse(savedVendedores) : DEFAULT_VENDEDORES,
       whatsappConfig: { enabled: true, phoneNumber: '5511999999999' }
     };
   });
