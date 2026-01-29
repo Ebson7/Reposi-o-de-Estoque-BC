@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText } from 'lucide-react';
+import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
 
 interface UserPortalProps {
@@ -13,6 +13,8 @@ interface UserPortalProps {
   onClearUserRequests: (solicitante: string) => void;
   onUpdateRequest: (req: StockRequest) => void;
 }
+
+const UNIT_OPTIONS: UnitType[] = ['UN', 'CX', 'DP', 'PCT', 'PT', 'SC', 'FD'];
 
 export const UserPortal: React.FC<UserPortalProps> = ({ 
   products, 
@@ -36,10 +38,13 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   
   // Request Form States
   const [quant, setQuant] = useState<number>(1);
-  const [unit, setUnit] = useState<UnitType>('Caixa');
-  const [type, setType] = useState<RequestType>('Teste');
-  const [solicitante, setSolicitante] = useState(vendedores[0] || '');
+  const [unit, setUnit] = useState<UnitType>('CX');
+  const [type, setType] = useState<RequestType>('Aposta na Venda');
+  const [solicitante, setSolicitante] = useState(() => {
+    return '';
+  });
   const [observacoes, setObservacoes] = useState('');
+  const [isValidadeCurta, setIsValidadeCurta] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filtro Combinado
@@ -60,7 +65,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
   // Histórico filtrado pelo solicitante atual
   const myRequests = useMemo(() => {
-    if (!solicitante) return requests;
+    if (!solicitante) return [];
     return requests.filter(r => r.solicitante === solicitante);
   }, [requests, solicitante]);
 
@@ -73,7 +78,10 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
   const handleCopyFormattedList = () => {
     const dateStr = new Date().toLocaleDateString('pt-BR');
-    const itemsStr = myRequests.map(r => `QTD: ${r.quantidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`).join('\n');
+    // Adicionado o label "UNIDADE:" após a quantidade no mapeamento do texto
+    const itemsStr = myRequests.map(r => 
+      `QTD: ${r.quantidade} UNIDADE: ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`
+    ).join('\n');
     
     const fullText = `📦 PEDIDO MARSIL
 📅 Data do Pedido: ${dateStr}
@@ -102,6 +110,7 @@ Pedido Extra Boracéia`;
       setType(req.tipo);
       setSolicitante(req.solicitante);
       setObservacoes(req.observacoes || '');
+      setIsValidadeCurta(req.isValidadeCurta || false);
     }
   };
 
@@ -120,6 +129,7 @@ Pedido Extra Boracéia`;
           tipo: type,
           solicitante: solicitante,
           observacoes: observacoes,
+          isValidadeCurta: isValidadeCurta,
           productSabor: selected.sabor || ''
         };
         onUpdateRequest(updatedReq);
@@ -136,6 +146,7 @@ Pedido Extra Boracéia`;
         tipo: type,
         solicitante: solicitante,
         observacoes: observacoes,
+        isValidadeCurta: isValidadeCurta,
         dataSolicitacao: new Date().toISOString(),
         status: 'Pendente'
       };
@@ -151,6 +162,7 @@ Pedido Extra Boracéia`;
       setRequestStatus('idle');
       setQuant(1);
       setObservacoes('');
+      setIsValidadeCurta(false);
     }, 1200);
   };
 
@@ -166,6 +178,34 @@ Pedido Extra Boracéia`;
 
   return (
     <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-500">
+      <div className={`p-6 rounded-3xl transition-all duration-500 border ${!solicitante ? 'bg-blue-600 border-blue-500 shadow-2xl shadow-blue-500/20 text-white' : 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 shadow-sm'}`}>
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="flex-grow space-y-2">
+            <h3 className={`text-base font-black uppercase tracking-widest flex items-center gap-2 ${!solicitante ? 'text-white' : 'dark:text-white'}`}>
+              <User className={`w-5 h-5 ${!solicitante ? 'text-blue-100' : 'text-blue-500'}`} /> 
+              Vendedor Responsável
+            </h3>
+            <p className={`text-[10px] font-bold uppercase ${!solicitante ? 'text-blue-100' : 'text-gray-400'}`}>
+              {!solicitante ? 'Selecione sua identificação para começar a consulta' : 'Operando como ' + solicitante}
+            </p>
+          </div>
+
+          <div className="relative group w-full sm:w-80">
+            <select 
+              className={`w-full pl-5 pr-10 py-4 rounded-2xl outline-none text-[11px] font-black uppercase tracking-wider shadow-sm transition-all appearance-none cursor-pointer border-2 ${!solicitante ? 'bg-white text-blue-600 border-white' : 'bg-gray-50 dark:bg-slate-800 dark:text-white border-transparent focus:border-blue-500'}`}
+              value={solicitante}
+              onChange={(e) => setSolicitante(e.target.value)}
+            >
+              <option value="" disabled>Selecione um Vendedor...</option>
+              {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <div className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${!solicitante ? 'text-blue-600' : 'text-gray-400'}`}>
+              <ArrowRight className="w-3 h-3 rotate-90" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 w-fit mx-auto sm:mx-0">
         <button 
           onClick={() => setActiveView('consulta')}
@@ -177,12 +217,12 @@ Pedido Extra Boracéia`;
           onClick={() => setActiveView('historico')}
           className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'historico' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
         >
-          <History className="w-3.5 h-3.5" /> Meu Carrinho / Pedidos
+          <History className="w-3.5 h-3.5" /> Meu Carrinho ({myRequests.length})
         </button>
       </div>
 
       {activeView === 'consulta' ? (
-        <div className="space-y-6">
+        <div className={`space-y-6 transition-opacity duration-300 ${!solicitante ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800">
             <div className="flex justify-between items-end mb-6">
               <div>
@@ -256,17 +296,19 @@ Pedido Extra Boracéia`;
                     </div>
                     <button 
                       type="button"
+                      disabled={!solicitante}
                       onClick={() => {
                         setEditingRequestId(null);
                         setSelected(p);
                         setQuant(1);
-                        setUnit('Caixa');
-                        setType('Teste');
+                        setUnit('CX');
+                        setType('Aposta na Venda');
                         setObservacoes('');
+                        setIsValidadeCurta(false);
                       }} 
-                      className="flex items-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-500/30 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest"
+                      className="flex items-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-slate-800 text-white rounded-2xl shadow-xl shadow-blue-500/30 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest disabled:shadow-none"
                     >
-                      <ShoppingCart className="w-4 h-4" /> Solicitar Item
+                      <ShoppingCart className="w-4 h-4" /> Solicitar
                     </button>
                   </div>
                 </div>
@@ -283,12 +325,12 @@ Pedido Extra Boracéia`;
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden animate-in slide-in-from-right-4">
-          <div className="p-6 border-b border-gray-50 dark:border-slate-800 flex justify-between items-center bg-gray-50/20 dark:bg-slate-800/20">
+          <div className="p-6 border-b border-gray-50 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center bg-gray-50/20 dark:bg-slate-800/20 gap-4">
             <div>
               <h3 className="text-sm font-black dark:text-white uppercase tracking-wider flex items-center gap-2">
                 <History className="w-4 h-4 text-blue-500" /> Histórico / Carrinho de Pedidos
               </h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Vendedor Ativo: {solicitante}</p>
+              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Vendedor Ativo: {solicitante || '---'}</p>
             </div>
             <div className="flex gap-2">
               <button 
@@ -297,7 +339,7 @@ Pedido Extra Boracéia`;
                 className="text-[9px] font-black bg-red-50 dark:bg-red-900/30 text-red-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm disabled:opacity-30"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Limpar Carrinho
+                Limpar
               </button>
               <button 
                 onClick={handleCopyFormattedList}
@@ -316,11 +358,11 @@ Pedido Extra Boracéia`;
                 <p className="text-[10px] font-black uppercase tracking-widest">Seu carrinho de solicitações está vazio.</p>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[500px]">
                 <thead className="bg-gray-50/50 dark:bg-slate-800/50">
                   <tr>
                     <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Item</th>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Sabor</th>
+                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Solicitação</th>
                     <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
                   </tr>
                 </thead>
@@ -329,19 +371,28 @@ Pedido Extra Boracéia`;
                     <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-1.5 w-fit rounded uppercase">{req.productCode}</span>
-                          <p className="text-[11px] font-bold dark:text-slate-200 line-clamp-1">{req.productName}</p>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[9px] font-black text-gray-500 uppercase">{req.quantidade} {req.unidade === 'Caixa' ? 'CX' : 'UN'}</span>
-                            <span className="text-[8px] font-bold text-gray-400 uppercase">{req.tipo}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-1.5 w-fit rounded uppercase">{req.productCode}</span>
+                            {req.isValidadeCurta && (
+                              <span className="text-[8px] font-black bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase">
+                                <Timer className="w-2.5 h-2.5" /> Val. Curta
+                              </span>
+                            )}
                           </div>
+                          <p className="text-[11px] font-bold dark:text-slate-200 line-clamp-1">{req.productName}</p>
+                          {req.productSabor && (
+                             <p className="text-[9px] font-black text-pink-500 uppercase">{req.productSabor}</p>
+                          )}
                           {req.observacoes && (
                             <p className="text-[9px] text-blue-500 font-medium italic mt-0.5 max-w-xs truncate">"{req.observacoes}"</p>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-[10px] font-black text-pink-500 dark:text-pink-400 uppercase">{req.productSabor || 'N/A'}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[11px] font-black text-gray-700 dark:text-slate-300 uppercase">{req.quantidade} {req.unidade}</span>
+                          <span className="text-[8px] font-bold text-gray-400 uppercase">{req.tipo}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center gap-3">
@@ -354,7 +405,6 @@ Pedido Extra Boracéia`;
                             <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
                               <Edit3 className="w-4 h-4" />
                             </div>
-                            <span className="text-[7px] font-black text-blue-500 uppercase opacity-0 group-hover/btn:opacity-100 transition-opacity">Editar</span>
                           </button>
                           <button 
                             type="button"
@@ -370,7 +420,6 @@ Pedido Extra Boracéia`;
                             <div className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 group-hover/btn:bg-red-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
                               <Trash2 className="w-4 h-4" />
                             </div>
-                            <span className="text-[7px] font-black text-red-500 uppercase opacity-0 group-hover/btn:opacity-100 transition-opacity">Excluir</span>
                           </button>
                         </div>
                       </td>
@@ -389,7 +438,7 @@ Pedido Extra Boracéia`;
             <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-800/30">
               <div>
                 <h3 className="text-lg font-black dark:text-white uppercase leading-tight">
-                  {editingRequestId ? 'Editar Pedido' : 'Configurar Pedido'}
+                  {editingRequestId ? 'Editar Item' : 'Configurar Item'}
                 </h3>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-[10px] font-bold text-blue-500 uppercase line-clamp-1">{selected.produto}</p>
@@ -403,7 +452,7 @@ Pedido Extra Boracéia`;
               <button onClick={() => { setSelected(null); setEditingRequestId(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             
-            <form onSubmit={handleSendRequest} className="p-6 space-y-4">
+            <form onSubmit={handleSendRequest} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-400 px-1">Quantidade</label>
@@ -412,26 +461,33 @@ Pedido Extra Boracéia`;
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-400 px-1">Unidade</label>
                   <select className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 rounded-xl font-bold dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner" value={unit} onChange={e => setUnit(e.target.value as UnitType)}>
-                    <option value="Caixa">Caixa</option>
-                    <option value="Unidade">Unidade</option>
+                    {UNIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                   </select>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Vendedor Responsável</label>
-                <select className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 rounded-xl font-bold dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner" value={solicitante} onChange={e => setSolicitante(e.target.value)}>
-                  <option value="" disabled>Selecione um vendedor...</option>
-                  {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 px-1">Natureza do Pedido</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setType('Teste')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Teste' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Teste / Amostra</button>
+                  <button type="button" onClick={() => setType('Aposta na Venda')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Aposta na Venda' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Aposta na Venda</button>
                   <button type="button" onClick={() => setType('Venda Garantida')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Venda Garantida' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Venda Garantida</button>
                 </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsValidadeCurta(!isValidadeCurta)} 
+                  className={`w-full flex items-center justify-between px-5 py-4 rounded-xl border-2 transition-all ${isValidadeCurta ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Timer className={`w-5 h-5 ${isValidadeCurta ? 'text-orange-500' : 'text-gray-400'}`} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Validade Curta?</span>
+                  </div>
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${isValidadeCurta ? 'bg-orange-500 border-orange-500' : 'border-gray-200 dark:border-slate-700'}`}>
+                    {isValidadeCurta && <Check className="w-3 h-3 text-white stroke-[4]" />}
+                  </div>
+                </button>
               </div>
 
               <div className="space-y-1.5">
@@ -439,7 +495,7 @@ Pedido Extra Boracéia`;
                   <MessageSquareText className="w-3 h-3 text-blue-500" /> Observações (Opcional)
                 </label>
                 <textarea 
-                  placeholder="Ex: Urgente para amanhã, trocar por similar se necessário..." 
+                  placeholder="Ex: Urgente para amanhã..." 
                   className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-800 rounded-xl font-medium text-xs dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner h-20 resize-none"
                   value={observacoes}
                   onChange={e => setObservacoes(e.target.value)}
@@ -449,14 +505,14 @@ Pedido Extra Boracéia`;
               <button 
                 disabled={isSubmitting || !solicitante} 
                 type="submit" 
-                className={`w-full font-black py-8 rounded-[2rem] flex items-center justify-center gap-4 uppercase text-base tracking-[0.15em] shadow-2xl active:scale-95 transition-all mt-6 ${requestStatus === 'success' ? 'bg-emerald-500 text-white ring-4 ring-emerald-500/20' : 'bg-blue-600 hover:bg-blue-700 text-white ring-4 ring-blue-600/10'}`}
+                className={`w-full font-black py-6 rounded-2xl flex items-center justify-center gap-4 uppercase text-sm tracking-[0.15em] shadow-2xl active:scale-95 transition-all mt-6 ${requestStatus === 'success' ? 'bg-emerald-500 text-white ring-4 ring-emerald-500/20' : 'bg-blue-600 hover:bg-blue-700 text-white ring-4 ring-blue-600/10'}`}
               >
                 {isSubmitting ? (
                   <RefreshCw className="w-6 h-6 animate-spin" />
                 ) : requestStatus === 'success' ? (
-                  <><CheckCircle2 className="w-7 h-7" /> {editingRequestId ? 'ATUALIZADO!' : 'ADICIONADO!'}</>
+                  <><CheckCircle2 className="w-6 h-6" /> {editingRequestId ? 'ATUALIZADO!' : 'ADICIONADO!'}</>
                 ) : (
-                  <><PlusCircle className="w-7 h-7" /> {editingRequestId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR AO MEU PEDIDO'}</>
+                  <><PlusCircle className="w-6 h-6" /> {editingRequestId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR AO PEDIDO'}</>
                 )}
               </button>
             </form>

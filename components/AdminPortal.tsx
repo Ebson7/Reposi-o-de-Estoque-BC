@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Upload, Database, FileText, CheckCircle, XCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Info, Clock, Check, Trash2, Share2, ClipboardList, Send, MessageSquareText } from 'lucide-react';
+import { Upload, Database, FileText, CheckCircle, XCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Info, Clock, Check, Trash2, Share2, ClipboardList, Send, MessageSquareText, Timer } from 'lucide-react';
 import { Product, StockRequest, AppState, WhatsAppConfig } from '../types';
 import { StatsCard } from './StatsCard';
 import Papa from 'papaparse';
@@ -238,13 +238,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   <p className="text-[10px] font-black uppercase tracking-widest">Aguardando solicitações...</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead className="bg-gray-50/50 dark:bg-slate-800/50">
                     <tr>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Solicitante</th>
-                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Produto / Sabor</th>
-                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Qtd</th>
-                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Status</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Produto / Obs</th>
                       <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
                     </tr>
                   </thead>
@@ -256,10 +254,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <p className="text-[8px] text-gray-400 font-bold">{new Date(req.dataSolicitacao).toLocaleString()}</p>
                         </td>
                         <td className="px-6 py-4">
-                          <p className="text-xs font-bold dark:text-slate-300 line-clamp-1">{req.productName}</p>
-                          <div className="flex gap-2 items-center flex-wrap mt-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-xs font-bold dark:text-slate-300 line-clamp-1">{req.productName}</p>
+                            {req.isValidadeCurta && (
+                              <span className="text-[7px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1 py-0.5 rounded font-black uppercase flex items-center gap-0.5">
+                                <Timer className="w-2 h-2" /> Validade Curta
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 items-center flex-wrap">
                             <span className="text-[8px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-1.5 py-0.5 rounded font-black uppercase">{req.tipo}</span>
-                            {req.productSabor && <span className="text-[8px] bg-pink-50 dark:bg-pink-900/30 text-pink-500 px-1.5 py-0.5 rounded font-black uppercase">{req.productSabor}</span>}
+                            <span className="text-[8px] text-gray-500 font-bold">{req.quantidade} {req.unidade}</span>
                           </div>
                           {req.observacoes && (
                             <div className="mt-2 flex items-start gap-1 bg-gray-50 dark:bg-slate-800/60 p-2 rounded-lg border border-gray-100 dark:border-slate-700/50">
@@ -268,25 +273,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4">
-                          <p className="text-xs font-black dark:text-white">{req.quantidade} <span className="text-[9px] text-gray-400">{req.unidade === 'Caixa' ? 'CX' : 'UN'}</span></p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-full ${
-                            req.status === 'Pendente' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 
-                            req.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 
-                            'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                          }`}>
-                            {req.status}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 text-center">
-                          {req.status === 'Pendente' && (
-                            <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => onUpdateRequestStatus(req.id, 'Aprovado')} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all" title="Aprovar"><Check className="w-3 h-3" /></button>
-                              <button onClick={() => onUpdateRequestStatus(req.id, 'Recusado')} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all" title="Recusar"><X className="w-3 h-3" /></button>
-                            </div>
-                          )}
+                          <div className="flex flex-col items-center gap-2">
+                             <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              req.status === 'Pendente' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 
+                              req.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 
+                              'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                            }`}>
+                              {req.status}
+                            </span>
+                            {req.status === 'Pendente' && (
+                              <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => onUpdateRequestStatus(req.id, 'Aprovado')} className="p-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all" title="Aprovar"><Check className="w-3 h-3" /></button>
+                                <button onClick={() => onUpdateRequestStatus(req.id, 'Recusado')} className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all" title="Recusar"><X className="w-3 h-3" /></button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

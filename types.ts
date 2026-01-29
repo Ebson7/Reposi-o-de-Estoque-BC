@@ -12,8 +12,8 @@ export interface Product {
   estoqueBoraceia: number;
 }
 
-export type RequestType = 'Teste' | 'Venda Garantida';
-export type UnitType = 'Caixa' | 'Unidade';
+export type RequestType = 'Aposta na Venda' | 'Venda Garantida';
+export type UnitType = 'UN' | 'CX' | 'DP' | 'PCT' | 'PT' | 'SC' | 'FD';
 
 export interface WhatsAppConfig {
   enabled: boolean;
@@ -31,6 +31,7 @@ export interface StockRequest {
   tipo: RequestType;
   solicitante: string;
   observacoes?: string;
+  isValidadeCurta: boolean;
   dataSolicitacao: string; // ISO format
   status: 'Pendente' | 'Aprovado' | 'Recusado';
 }
