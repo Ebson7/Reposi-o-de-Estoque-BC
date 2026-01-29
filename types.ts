@@ -30,6 +30,7 @@ export interface StockRequest {
   unidade: UnitType;
   tipo: RequestType;
   solicitante: string;
+  observacoes?: string;
   dataSolicitacao: string; // ISO format
   status: 'Pendente' | 'Aprovado' | 'Recusado';
 }

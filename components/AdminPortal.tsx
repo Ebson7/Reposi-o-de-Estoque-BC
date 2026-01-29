@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Upload, Database, FileText, CheckCircle, XCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Info, Clock, Check, Trash2, Share2, ClipboardList, Send } from 'lucide-react';
+import { Upload, Database, FileText, CheckCircle, XCircle, Users, UserPlus, X, Globe, ArrowDownToLine, RefreshCw, AlertCircle, Phone, Info, Clock, Check, Trash2, Share2, ClipboardList, Send, MessageSquareText } from 'lucide-react';
 import { Product, StockRequest, AppState, WhatsAppConfig } from '../types';
 import { StatsCard } from './StatsCard';
 import Papa from 'papaparse';
@@ -257,10 +257,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-bold dark:text-slate-300 line-clamp-1">{req.productName}</p>
-                          <div className="flex gap-2 items-center">
+                          <div className="flex gap-2 items-center flex-wrap mt-1">
                             <span className="text-[8px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-1.5 py-0.5 rounded font-black uppercase">{req.tipo}</span>
                             {req.productSabor && <span className="text-[8px] bg-pink-50 dark:bg-pink-900/30 text-pink-500 px-1.5 py-0.5 rounded font-black uppercase">{req.productSabor}</span>}
                           </div>
+                          {req.observacoes && (
+                            <div className="mt-2 flex items-start gap-1 bg-gray-50 dark:bg-slate-800/60 p-2 rounded-lg border border-gray-100 dark:border-slate-700/50">
+                              <MessageSquareText className="w-2.5 h-2.5 text-blue-500 mt-0.5 shrink-0" />
+                              <p className="text-[9px] text-gray-600 dark:text-gray-400 font-medium italic leading-tight">"{req.observacoes}"</p>
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-xs font-black dark:text-white">{req.quantidade} <span className="text-[9px] text-gray-400">{req.unidade === 'Caixa' ? 'CX' : 'UN'}</span></p>

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { UserPortal } from './components/UserPortal';
 import { AdminPortal } from './components/AdminPortal';
 import { AppState, Product, StockRequest, WhatsAppConfig } from './types';
@@ -167,10 +167,31 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleUpdateRequest = (updatedRequest: StockRequest) => {
+    setAppState(prev => ({
+      ...prev,
+      requests: prev.requests.map(r => String(r.id) === String(updatedRequest.id) ? updatedRequest : r)
+    }));
+  };
+
+  const handleDeleteRequest = useCallback((requestId: string) => {
+    setAppState(prev => {
+      const filtered = prev.requests.filter(r => String(r.id) !== String(requestId));
+      return { ...prev, requests: filtered };
+    });
+  }, []);
+
+  const handleClearUserRequests = useCallback((solicitante: string) => {
+    setAppState(prev => ({
+      ...prev,
+      requests: prev.requests.filter(r => r.solicitante !== solicitante)
+    }));
+  }, []);
+
   const handleUpdateRequestStatus = (requestId: string, status: StockRequest['status']) => {
     setAppState(prev => ({
       ...prev,
-      requests: prev.requests.map(r => r.id === requestId ? { ...r, status } : r)
+      requests: prev.requests.map(r => String(r.id) === String(requestId) ? { ...r, status } : r)
     }));
   };
 
@@ -275,7 +296,16 @@ const App: React.FC = () => {
           )
         ) : (
           activeTab === 'user' ? (
-            <UserPortal products={appState.products} requests={appState.requests} vendedores={appState.vendedores} whatsappConfig={appState.whatsappConfig} onSubmitRequest={handleSubmitRequest} />
+            <UserPortal 
+              products={appState.products} 
+              requests={appState.requests} 
+              vendedores={appState.vendedores} 
+              whatsappConfig={appState.whatsappConfig} 
+              onSubmitRequest={handleSubmitRequest}
+              onDeleteRequest={handleDeleteRequest}
+              onClearUserRequests={handleClearUserRequests}
+              onUpdateRequest={handleUpdateRequest}
+            />
           ) : (
             <AdminPortal appState={appState} onUploadData={handleUploadData} onAddVendedor={handleAddVendedor} onRemoveVendedor={handleRemoveVendedor} onUpdateWhatsApp={handleUpdateWhatsApp} onUpdateRequestStatus={handleUpdateRequestStatus} onClearRequests={handleClearRequests} />
           )

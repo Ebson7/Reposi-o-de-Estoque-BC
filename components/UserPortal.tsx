@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
-import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
 
 interface UserPortalProps {
@@ -9,15 +9,28 @@ interface UserPortalProps {
   vendedores: string[];
   whatsappConfig: WhatsAppConfig;
   onSubmitRequest: (req: StockRequest) => void;
+  onDeleteRequest: (id: string) => void;
+  onClearUserRequests: (solicitante: string) => void;
+  onUpdateRequest: (req: StockRequest) => void;
 }
 
-export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vendedores, whatsappConfig, onSubmitRequest }) => {
+export const UserPortal: React.FC<UserPortalProps> = ({ 
+  products, 
+  requests, 
+  vendedores, 
+  whatsappConfig, 
+  onSubmitRequest,
+  onDeleteRequest,
+  onClearUserRequests,
+  onUpdateRequest
+}) => {
   const [activeView, setActiveView] = useState<'consulta' | 'historico'>('consulta');
   const [filterCodigo, setFilterCodigo] = useState('');
   const [filterDescricao, setFilterDescricao] = useState('');
   const [filterFornecedor, setFilterFornecedor] = useState('');
   
   const [selected, setSelected] = useState<Product | null>(null);
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [requestStatus, setRequestStatus] = useState<'idle' | 'success'>('idle');
   
@@ -26,6 +39,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
   const [unit, setUnit] = useState<UnitType>('Caixa');
   const [type, setType] = useState<RequestType>('Teste');
   const [solicitante, setSolicitante] = useState(vendedores[0] || '');
+  const [observacoes, setObservacoes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filtro Combinado
@@ -57,10 +71,9 @@ export const UserPortal: React.FC<UserPortalProps> = ({ products, requests, vend
     });
   };
 
-  // Função para copiar lista formatada conforme os labels e template solicitados
   const handleCopyFormattedList = () => {
     const dateStr = new Date().toLocaleDateString('pt-BR');
-    const itemsStr = myRequests.map(r => `QTD: ${r.quantidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}`).join('\n');
+    const itemsStr = myRequests.map(r => `QTD: ${r.quantidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`).join('\n');
     
     const fullText = `📦 PEDIDO MARSIL
 📅 Data do Pedido: ${dateStr}
@@ -73,34 +86,72 @@ Pedido Extra Boracéia`;
     handleCopy(fullText, 'hist-all');
   };
 
+  const handleClearCart = () => {
+    if (window.confirm('Deseja realmente excluir TODOS os itens do seu pedido atual?')) {
+      onClearUserRequests(solicitante);
+    }
+  };
+
+  const handleEditRequest = (req: StockRequest) => {
+    const product = products.find(p => String(p.id) === String(req.productId) || String(p.codigo) === String(req.productCode));
+    if (product) {
+      setSelected(product);
+      setEditingRequestId(req.id);
+      setQuant(req.quantidade);
+      setUnit(req.unidade);
+      setType(req.tipo);
+      setSolicitante(req.solicitante);
+      setObservacoes(req.observacoes || '');
+    }
+  };
+
   const handleSendRequest = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected || !solicitante) return;
     setIsSubmitting(true);
 
-    const newReq: StockRequest = {
-      id: `req-${Date.now()}`,
-      productId: selected.id,
-      productName: selected.produto,
-      productCode: String(selected.codigo),
-      productSabor: selected.sabor || '',
-      quantidade: quant,
-      unidade: unit,
-      tipo: type,
-      solicitante: solicitante,
-      dataSolicitacao: new Date().toISOString(),
-      status: 'Pendente'
-    };
+    if (editingRequestId) {
+      const originalReq = requests.find(r => String(r.id) === String(editingRequestId));
+      if (originalReq) {
+        const updatedReq: StockRequest = {
+          ...originalReq,
+          quantidade: quant,
+          unidade: unit,
+          tipo: type,
+          solicitante: solicitante,
+          observacoes: observacoes,
+          productSabor: selected.sabor || ''
+        };
+        onUpdateRequest(updatedReq);
+      }
+    } else {
+      const newReq: StockRequest = {
+        id: `req-${Date.now()}`,
+        productId: selected.id,
+        productName: selected.produto,
+        productCode: String(selected.codigo),
+        productSabor: selected.sabor || '',
+        quantidade: quant,
+        unidade: unit,
+        tipo: type,
+        solicitante: solicitante,
+        observacoes: observacoes,
+        dataSolicitacao: new Date().toISOString(),
+        status: 'Pendente'
+      };
+      onSubmitRequest(newReq);
+    }
 
-    onSubmitRequest(newReq);
     setRequestStatus('success');
 
     setTimeout(() => {
       setIsSubmitting(false);
       setSelected(null);
+      setEditingRequestId(null);
       setRequestStatus('idle');
       setQuant(1);
-    }, 1500);
+      setObservacoes('');
+    }, 1200);
   };
 
   const getStatusColor = (status: string) => {
@@ -115,7 +166,6 @@ Pedido Extra Boracéia`;
 
   return (
     <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-500">
-      {/* Switcher de Visão */}
       <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 w-fit mx-auto sm:mx-0">
         <button 
           onClick={() => setActiveView('consulta')}
@@ -205,7 +255,15 @@ Pedido Extra Boracéia`;
                       </div>
                     </div>
                     <button 
-                      onClick={() => setSelected(p)} 
+                      type="button"
+                      onClick={() => {
+                        setEditingRequestId(null);
+                        setSelected(p);
+                        setQuant(1);
+                        setUnit('Caixa');
+                        setType('Teste');
+                        setObservacoes('');
+                      }} 
                       className="flex items-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-500/30 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest"
                     >
                       <ShoppingCart className="w-4 h-4" /> Solicitar Item
@@ -214,13 +272,6 @@ Pedido Extra Boracéia`;
                 </div>
               ))}
               
-              {hasFilters && filteredProducts.length === 0 && (
-                <div className="text-center py-20 opacity-50 flex flex-col items-center">
-                  <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
-                  <p className="text-xs font-black uppercase tracking-widest max-w-[200px] leading-relaxed">Nenhum item localizado com esses filtros.</p>
-                </div>
-              )}
-
               {!hasFilters && (
                 <div className="text-center py-32 opacity-20 flex flex-col items-center">
                   <Search className="w-16 h-16 mb-4" />
@@ -241,11 +292,20 @@ Pedido Extra Boracéia`;
             </div>
             <div className="flex gap-2">
               <button 
+                onClick={handleClearCart}
+                disabled={myRequests.length === 0}
+                className="text-[9px] font-black bg-red-50 dark:bg-red-900/30 text-red-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm disabled:opacity-30"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Limpar Carrinho
+              </button>
+              <button 
                 onClick={handleCopyFormattedList}
-                className="text-[9px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm"
+                disabled={myRequests.length === 0}
+                className="text-[9px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm disabled:opacity-30"
               >
                 {copySuccess === 'hist-all' ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
-                Copiar Lista de Pedidos
+                Copiar Lista
               </button>
             </div>
           </div>
@@ -259,11 +319,8 @@ Pedido Extra Boracéia`;
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gray-50/50 dark:bg-slate-800/50">
                   <tr>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Data</th>
                     <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Item</th>
                     <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Sabor</th>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Quantidade</th>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Status</th>
                     <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
                   </tr>
                 </thead>
@@ -271,43 +328,51 @@ Pedido Extra Boracéia`;
                   {myRequests.map(req => (
                     <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors group">
                       <td className="px-6 py-4">
-                        <p className="text-[10px] font-black dark:text-white">{new Date(req.dataSolicitacao).toLocaleDateString()}</p>
-                        <p className="text-[8px] text-gray-400 font-bold">{new Date(req.dataSolicitacao).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1">
-                          <p className="text-[10px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-1.5 rounded uppercase">{req.productCode}</p>
-                          <button onClick={() => handleCopy(`${req.productCode} - ${req.productName}`, `req-copy-${req.id}`)} className="text-gray-300 hover:text-blue-500 p-1">
-                            {copySuccess === `req-copy-${req.id}` ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-1.5 w-fit rounded uppercase">{req.productCode}</span>
+                          <p className="text-[11px] font-bold dark:text-slate-200 line-clamp-1">{req.productName}</p>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[9px] font-black text-gray-500 uppercase">{req.quantidade} {req.unidade === 'Caixa' ? 'CX' : 'UN'}</span>
+                            <span className="text-[8px] font-bold text-gray-400 uppercase">{req.tipo}</span>
+                          </div>
+                          {req.observacoes && (
+                            <p className="text-[9px] text-blue-500 font-medium italic mt-0.5 max-w-xs truncate">"{req.observacoes}"</p>
+                          )}
                         </div>
-                        <p className="text-[10px] font-bold dark:text-slate-300 line-clamp-1 mt-0.5">{req.productName}</p>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-[10px] font-black text-pink-500 dark:text-pink-400 uppercase">{req.productSabor || 'N/A'}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-[10px] font-black dark:text-white uppercase">{req.quantidade} {req.unidade === 'Caixa' ? 'CX' : 'UN'}</p>
-                        <span className="text-[8px] text-gray-400 font-bold uppercase">{req.tipo}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-full ${
-                          req.status === 'Pendente' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/20' : 
-                          req.status === 'Aprovado' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20' : 'bg-red-100 text-red-700 dark:bg-red-900/20'
-                        }`}>
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button 
-                          onClick={() => {
-                            const p = products.find(prod => String(prod.id) === String(req.productId) || String(prod.codigo) === String(req.productCode));
-                            if (p) { setSelected(p); setActiveView('consulta'); }
-                          }}
-                          className="p-2.5 bg-gray-100 dark:bg-slate-800 text-gray-500 hover:text-blue-600 rounded-xl transition-all shadow-sm"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-center gap-3">
+                          <button 
+                            type="button"
+                            onClick={() => handleEditRequest(req)}
+                            className="flex flex-col items-center gap-1 group/btn"
+                            title="Editar"
+                          >
+                            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
+                              <Edit3 className="w-4 h-4" />
+                            </div>
+                            <span className="text-[7px] font-black text-blue-500 uppercase opacity-0 group-hover/btn:opacity-100 transition-opacity">Editar</span>
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm('Deseja realmente excluir este item do pedido?')) {
+                                onDeleteRequest(req.id);
+                              }
+                            }}
+                            className="flex flex-col items-center gap-1 group/btn"
+                            title="Excluir"
+                          >
+                            <div className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 group-hover/btn:bg-red-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
+                              <Trash2 className="w-4 h-4" />
+                            </div>
+                            <span className="text-[7px] font-black text-red-500 uppercase opacity-0 group-hover/btn:opacity-100 transition-opacity">Excluir</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -318,18 +383,16 @@ Pedido Extra Boracéia`;
         </div>
       )}
 
-      {/* Modal de Solicitação - Botão Aumentado significativamente conforme solicitado */}
       {selected && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
             <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-800/30">
               <div>
-                <h3 className="text-lg font-black dark:text-white uppercase leading-tight">Configurar Pedido</h3>
+                <h3 className="text-lg font-black dark:text-white uppercase leading-tight">
+                  {editingRequestId ? 'Editar Pedido' : 'Configurar Pedido'}
+                </h3>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-[10px] font-bold text-blue-500 uppercase line-clamp-1">{selected.produto}</p>
-                  <button onClick={() => handleCopy(`${selected.codigo} - ${selected.produto}`, 'modal-copy')} className="text-gray-400 hover:text-blue-500 p-1">
-                    {copySuccess === 'modal-copy' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
                 </div>
                 {selected.sabor && (
                   <p className="text-[9px] font-black text-pink-500 uppercase flex items-center gap-1 mt-1">
@@ -337,7 +400,7 @@ Pedido Extra Boracéia`;
                   </p>
                 )}
               </div>
-              <button onClick={() => setSelected(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
+              <button onClick={() => { setSelected(null); setEditingRequestId(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             
             <form onSubmit={handleSendRequest} className="p-6 space-y-4">
@@ -371,7 +434,18 @@ Pedido Extra Boracéia`;
                 </div>
               </div>
 
-              {/* Botão Aumentado para o Máximo conforme solicitado */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1 flex items-center gap-1">
+                  <MessageSquareText className="w-3 h-3 text-blue-500" /> Observações (Opcional)
+                </label>
+                <textarea 
+                  placeholder="Ex: Urgente para amanhã, trocar por similar se necessário..." 
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-800 rounded-xl font-medium text-xs dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner h-20 resize-none"
+                  value={observacoes}
+                  onChange={e => setObservacoes(e.target.value)}
+                />
+              </div>
+
               <button 
                 disabled={isSubmitting || !solicitante} 
                 type="submit" 
@@ -380,9 +454,9 @@ Pedido Extra Boracéia`;
                 {isSubmitting ? (
                   <RefreshCw className="w-6 h-6 animate-spin" />
                 ) : requestStatus === 'success' ? (
-                  <><CheckCircle2 className="w-7 h-7" /> ADICIONADO!</>
+                  <><CheckCircle2 className="w-7 h-7" /> {editingRequestId ? 'ATUALIZADO!' : 'ADICIONADO!'}</>
                 ) : (
-                  <><PlusCircle className="w-7 h-7" /> ADICIONAR AO MEU PEDIDO</>
+                  <><PlusCircle className="w-7 h-7" /> {editingRequestId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR AO MEU PEDIDO'}</>
                 )}
               </button>
             </form>
