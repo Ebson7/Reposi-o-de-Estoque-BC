@@ -67,7 +67,7 @@ const App: React.FC = () => {
     };
   });
 
-  const mapCSVData = (data: any[]) => {
+  const mapCSVData = (data: any[]): Product[] => {
     return data.map((row: any, i: number) => {
       const findVal = (keys: string[]) => {
         const key = Object.keys(row).find(k => 
@@ -102,17 +102,21 @@ const App: React.FC = () => {
         complete: (results) => {
           const mapped = mapCSVData(results.data);
           if (mapped.length > 0) {
-            setAppState(prev => ({ 
-              ...prev, 
-              products: mapped,
-              updateHistory: [{
+            setAppState(prev => {
+              const newLog: UpdateLog = {
                 id: Date.now().toString(),
                 timestamp: new Date().toISOString(),
                 fileName: 'Sincronização Automática',
                 recordCount: mapped.length,
                 status: 'success'
-              }, ...prev.updateHistory].slice(0, 20)
-            }));
+              };
+              
+              return { 
+                ...prev, 
+                products: mapped,
+                updateHistory: [newLog, ...prev.updateHistory].slice(0, 20)
+              };
+            });
           }
           setIsSyncing(false);
           resolve();
