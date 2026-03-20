@@ -26,6 +26,7 @@ export interface StockRequest {
   productName: string;
   productCode: string;
   productSabor: string;
+  productSituacao?: string;
   quantidade: number;
   unidade: UnitType;
   tipo: RequestType;

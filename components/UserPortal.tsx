@@ -16,6 +16,19 @@ interface UserPortalProps {
 
 const UNIT_OPTIONS: UnitType[] = ['UN', 'CX', 'DP', 'PCT', 'PT', 'SC', 'FD'];
 
+const SITUACAO_MAP: Record<string, string> = {
+  'PR': 'Promoção',
+  'NO': 'Normal',
+  'EX': 'Preço Externo',
+  'DV': 'Promoção por Validade',
+  'PC': 'Proibida a Compra',
+  'EI': 'Embalagem Indisponível',
+  'FT': 'Falta Temporária',
+  'LJ': 'Venda somente Loja',
+  'FL': 'Fora de Linha',
+  'PF': 'Produto Funcional'
+};
+
 export const UserPortal: React.FC<UserPortalProps> = ({ 
   products, 
   requests, 
@@ -30,6 +43,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const [filterCodigo, setFilterCodigo] = useState('');
   const [filterDescricao, setFilterDescricao] = useState('');
   const [filterFornecedor, setFilterFornecedor] = useState('');
+  const [filterSituacao, setFilterSituacao] = useState('');
   
   const [selected, setSelected] = useState<Product | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -52,16 +66,18 @@ export const UserPortal: React.FC<UserPortalProps> = ({
     const cod = filterCodigo.toLowerCase().trim();
     const desc = filterDescricao.toLowerCase().trim();
     const forn = filterFornecedor.toLowerCase().trim();
+    const sit = filterSituacao.toLowerCase().trim();
     
-    if (!cod && !desc && !forn) return [];
+    if (!cod && !desc && !forn && !sit) return [];
     
     return products.filter(p => {
       const matchCod = !cod || String(p.codigo).toLowerCase().includes(cod);
       const matchDesc = !desc || p.produto.toLowerCase().includes(desc);
       const matchForn = !forn || p.fornecedor.toLowerCase().includes(forn);
-      return matchCod && matchDesc && matchForn;
+      const matchSit = !sit || (p.situacao && p.situacao.toLowerCase().includes(sit));
+      return matchCod && matchDesc && matchForn && matchSit;
     }).slice(0, 40);
-  }, [products, filterCodigo, filterDescricao, filterFornecedor]);
+  }, [products, filterCodigo, filterDescricao, filterFornecedor, filterSituacao]);
 
   // Histórico filtrado pelo solicitante atual
   const myRequests = useMemo(() => {
@@ -79,8 +95,9 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const handleCopyFormattedList = () => {
     const dateStr = new Date().toLocaleDateString('pt-BR');
     // Removido o label "UNIDADE:" após a quantidade no mapeamento do texto
+    // Adicionado a abreviação da situação no final de cada item
     const itemsStr = myRequests.map(r => 
-      `QTD: ${r.quantidade} ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`
+      `QTD: ${r.quantidade} ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}${r.productSituacao ? ` [${r.productSituacao}]` : ''}`
     ).join('\n');
     
     const fullText = `📦 PEDIDO MARSIL
@@ -130,7 +147,8 @@ Pedido Extra Boracéia`;
           solicitante: solicitante,
           observacoes: observacoes,
           isValidadeCurta: isValidadeCurta,
-          productSabor: selected.sabor || ''
+          productSabor: selected.sabor || '',
+          productSituacao: selected.situacao || ''
         };
         onUpdateRequest(updatedReq);
       }
@@ -141,6 +159,7 @@ Pedido Extra Boracéia`;
         productName: selected.produto,
         productCode: String(selected.codigo),
         productSabor: selected.sabor || '',
+        productSituacao: selected.situacao || '',
         quantidade: quant,
         unidade: unit,
         tipo: type,
@@ -174,7 +193,7 @@ Pedido Extra Boracéia`;
     return 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-400';
   };
 
-  const hasFilters = filterCodigo || filterDescricao || filterFornecedor;
+  const hasFilters = filterCodigo || filterDescricao || filterFornecedor || filterSituacao;
 
   return (
     <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-500">
@@ -232,26 +251,30 @@ Pedido Extra Boracéia`;
                 <p className="text-[10px] text-gray-400 font-bold uppercase">Busca por Código, Descrição ou Fabricante</p>
               </div>
               {hasFilters && (
-                <button onClick={() => { setFilterCodigo(''); setFilterDescricao(''); setFilterFornecedor(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline flex items-center gap-1 pb-1">
+                <button onClick={() => { setFilterCodigo(''); setFilterDescricao(''); setFilterFornecedor(''); setFilterSituacao(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline flex items-center gap-1 pb-1">
                   <X className="w-3 h-3" /> Limpar Filtros
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative group">
-                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                <input type="text" placeholder="Código Item" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterCodigo} onChange={(e) => setFilterCodigo(e.target.value)} />
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="relative group">
+                  <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
+                  <input type="text" placeholder="Código Item" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterCodigo} onChange={(e) => setFilterCodigo(e.target.value)} />
+                </div>
+                <div className="relative group">
+                  <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
+                  <input type="text" placeholder="Nome / Descrição" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterDescricao} onChange={(e) => setFilterDescricao(e.target.value)} />
+                </div>
+                <div className="relative group">
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
+                  <input type="text" placeholder="Fornecedor" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterFornecedor} onChange={(e) => setFilterFornecedor(e.target.value)} />
+                </div>
+                <div className="relative group">
+                  <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
+                  <input type="text" placeholder="Situação" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterSituacao} onChange={(e) => setFilterSituacao(e.target.value)} />
+                </div>
               </div>
-              <div className="relative group">
-                <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                <input type="text" placeholder="Nome / Descrição" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterDescricao} onChange={(e) => setFilterDescricao(e.target.value)} />
-              </div>
-              <div className="relative group">
-                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                <input type="text" placeholder="Fornecedor" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterFornecedor} onChange={(e) => setFilterFornecedor(e.target.value)} />
-              </div>
-            </div>
 
             <div className="mt-8 space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
               {filteredProducts.map(p => (
@@ -266,7 +289,7 @@ Pedido Extra Boracéia`;
                       </div>
                       {p.situacao && (
                         <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${getStatusColor(p.situacao)}`}>
-                          {p.situacao}
+                          {SITUACAO_MAP[p.situacao] || p.situacao}
                         </span>
                       )}
                     </div>
