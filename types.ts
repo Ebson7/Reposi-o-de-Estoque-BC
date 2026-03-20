@@ -20,15 +20,6 @@ export interface WhatsAppConfig {
   phoneNumber: string;
 }
 
-export interface UpdateLog {
-  id: string;
-  timestamp: string;
-  fileName: string;
-  recordCount: number;
-  status: 'success' | 'error';
-  errorMessage?: string;
-}
-
 export interface StockRequest {
   id: string;
   productId: string;
@@ -50,5 +41,4 @@ export interface AppState {
   requests: StockRequest[];
   vendedores: string[];
   whatsappConfig: WhatsAppConfig;
-  updateHistory: UpdateLog[];
 }

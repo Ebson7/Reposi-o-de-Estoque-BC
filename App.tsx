@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { UserPortal } from './components/UserPortal';
 import { AdminPortal } from './components/AdminPortal';
-import { AppState, Product, StockRequest, WhatsAppConfig, UpdateLog } from './types';
+import { AppState, Product, StockRequest, WhatsAppConfig } from './types';
 import { LayoutDashboard, ShieldCheck, Sun, Moon, KeyRound, LogOut, ChevronRight, Store, X, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
 
@@ -12,19 +12,42 @@ const PRODUCTS_KEY = 'marsil_local_products';
 const VENDEDORES_KEY = 'marsil_vendedores_list';
 const REQUESTS_KEY = 'marsil_requests_history';
 const SYNC_URL_KEY = 'marsil_sync_url';
-const UPDATE_HISTORY_KEY = 'marsil_update_history';
 
 const PASSWORDS = {
   VENDOR: '@marsil2026',
   ADMIN: '@adminMarsil2026'
 };
 
+// Lista oficial fornecida pelo usuário via imagem
 const DEFAULT_VENDEDORES = [
-  "ADALTON LUIZ", "AIRTON DONIZETTI", "ANA CAMARGO", "ANA PAULA", "CARLOS ROSEIRO",
-  "DOUGLAS PITELLI", "EDMILSON LEAL", "FERNANDO APARECIDO", "GUSTAVO PAULINO",
-  "JOAO JOSE", "JOAO MANUEL", "LEONARDO APARECIDO", "LUIS ALEXANDRE",
-  "MARCELO SANTOS", "MARCO AURELIO", "NIVALDO NEVES", "ROSIMAR FREITAS",
-  "ROZIMARA SOUZA", "TELMA CRISTINA", "WASHINGTON BELMIRO", "OUTRO"
+  "ADALTON LUIZ",
+  "AIRTON DONIZETTI",
+  "ANA CAMARGO",
+  "ANA PAULA",
+  "CARLOS ROSEIRO",
+  "DOUGLAS PITELLI",
+  "EDMILSON LEAL",
+  "FERNANDO APARECIDO",
+  "GUSTAVO PAULINO",
+  "JOAO JOSE",
+  "JOAO MANUEL",
+  "LEONARDO APARECIDO",
+  "LUIS ALEXANDRE",
+  "MARCELO SANTOS",
+  "MARCO AURELIO",
+  "MARCO AURELIO MARTINS FILHO",
+  "LEANDRO CAETANO MAFORT",
+  "JURACI SEBASTIÃO DOS REIS",
+  "VALDINEI DA SILVA PEREIRA",
+  "LEANDRO DA SILVA GREGIO",
+  "GIANDERSON SARTORE",
+  "GIAN CARLO DELVAZ",
+  "NIVALDO NEVES",
+  "ROSIMAR FREITAS",
+  "ROZIMARA SOUZA",
+  "TELMA CRISTINA",
+  "WASHINGTON BELMIRO",
+  "OUTRO"
 ];
 
 const App: React.FC = () => {
@@ -37,7 +60,6 @@ const App: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
   
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -48,26 +70,28 @@ const App: React.FC = () => {
     const savedProducts = localStorage.getItem(PRODUCTS_KEY);
     const savedVendedores = localStorage.getItem(VENDEDORES_KEY);
     const savedRequests = localStorage.getItem(REQUESTS_KEY);
-    const savedHistory = localStorage.getItem(UPDATE_HISTORY_KEY);
 
     let finalVendedores = DEFAULT_VENDEDORES;
     if (savedVendedores) {
       try {
         const parsed = JSON.parse(savedVendedores);
-        if (Array.isArray(parsed) && parsed.length > 0) finalVendedores = parsed;
-      } catch (e) { finalVendedores = DEFAULT_VENDEDORES; }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          finalVendedores = parsed;
+        }
+      } catch (e) {
+        finalVendedores = DEFAULT_VENDEDORES;
+      }
     }
 
     return { 
       products: savedProducts ? JSON.parse(savedProducts) : [], 
       requests: savedRequests ? JSON.parse(savedRequests) : [], 
       vendedores: finalVendedores,
-      whatsappConfig: { enabled: true, phoneNumber: '5511999999999' },
-      updateHistory: savedHistory ? JSON.parse(savedHistory) : []
+      whatsappConfig: { enabled: true, phoneNumber: '5511999999999' }
     };
   });
 
-  const mapCSVData = (data: any[]): Product[] => {
+  const mapCSVData = (data: any[]) => {
     return data.map((row: any, i: number) => {
       const findVal = (keys: string[]) => {
         const key = Object.keys(row).find(k => 
@@ -92,62 +116,15 @@ const App: React.FC = () => {
     }).filter(p => p.produto && p.produto !== '');
   };
 
-  const syncData = useCallback(async (url: string) => {
-    setIsSyncing(true);
-    return new Promise<void>((resolve, reject) => {
-      Papa.parse(url, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          const mapped = mapCSVData(results.data);
-          if (mapped.length > 0) {
-            setAppState(prev => {
-              const newLog: UpdateLog = {
-                id: Date.now().toString(),
-                timestamp: new Date().toISOString(),
-                fileName: 'Sincronização Automática',
-                recordCount: mapped.length,
-                status: 'success'
-              };
-              
-              return { 
-                ...prev, 
-                products: mapped,
-                updateHistory: [newLog, ...prev.updateHistory].slice(0, 20)
-              };
-            });
-          }
-          setIsSyncing(false);
-          resolve();
-        },
-        error: (error) => {
-          console.error("Erro na sincronização:", error);
-          setIsSyncing(false);
-          reject(error);
-        }
-      });
-    });
-  }, []);
-
-  const handleManualRefresh = async () => {
-    const url = localStorage.getItem(SYNC_URL_KEY);
-    if (url) {
-      await syncData(url);
-    } else {
-      alert("Nenhum link de sincronização configurado pelo administrador.");
-    }
-  };
-
   useEffect(() => {
     const initApp = async () => {
       const params = new URLSearchParams(window.location.search);
       const urlSync = params.get('s');
       const urlVendors = params.get('v');
-      const storedSyncUrl = localStorage.getItem(SYNC_URL_KEY);
       
       let initialVendedores = appState.vendedores;
 
+      // Se houver vendedores na URL, eles têm prioridade para sincronização
       if (urlVendors) {
         try {
           const parsed = JSON.parse(decodeURIComponent(urlVendors));
@@ -155,34 +132,47 @@ const App: React.FC = () => {
             initialVendedores = parsed;
             localStorage.setItem(VENDEDORES_KEY, JSON.stringify(parsed));
           }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error("Erro ao processar vendedores da URL", e);
+        }
       }
 
-      const finalSyncUrl = urlSync || storedSyncUrl;
-
-      if (finalSyncUrl) {
-        if (urlSync) localStorage.setItem(SYNC_URL_KEY, urlSync);
-        try {
-          await syncData(finalSyncUrl);
-        } catch (e) {
-          console.error("Falha ao sincronizar dados iniciais.");
-        } finally {
-          setIsLoading(false);
-        }
+      if (urlSync) {
+        localStorage.setItem(SYNC_URL_KEY, urlSync);
+        Papa.parse(urlSync, {
+          download: true,
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const mapped = mapCSVData(results.data);
+            setAppState(prev => ({ 
+              ...prev, 
+              products: mapped,
+              vendedores: initialVendedores 
+            }));
+            setIsLoading(false);
+          },
+          error: () => setIsLoading(false)
+        });
       } else {
-        if (urlVendors) setAppState(prev => ({ ...prev, vendedores: initialVendedores }));
+        // Se não houver link de sincronização, apenas atualiza os vendedores se vieram da URL
+        if (urlVendors) {
+          setAppState(prev => ({ ...prev, vendedores: initialVendedores }));
+        }
         setTimeout(() => setIsLoading(false), 800);
       }
     };
     initApp();
   }, []);
 
-  useEffect(() => { localStorage.setItem(AUTH_KEY, authRole); }, [authRole]);
+  useEffect(() => {
+    localStorage.setItem(AUTH_KEY, authRole);
+  }, [authRole]);
+
   useEffect(() => {
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(appState.products));
     localStorage.setItem(VENDEDORES_KEY, JSON.stringify(appState.vendedores));
     localStorage.setItem(REQUESTS_KEY, JSON.stringify(appState.requests));
-    localStorage.setItem(UPDATE_HISTORY_KEY, JSON.stringify(appState.updateHistory));
   }, [appState]);
 
   useEffect(() => {
@@ -198,6 +188,7 @@ const App: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const requiredPass = loginTarget === 'admin' ? PASSWORDS.ADMIN : PASSWORDS.VENDOR;
+
     if (passwordInput === requiredPass) {
       const role = loginTarget === 'admin' ? 'admin' : 'vendor';
       setAuthRole(role);
@@ -223,13 +214,6 @@ const App: React.FC = () => {
     setAppState(prev => ({ ...prev, products: newProducts }));
   };
 
-  const handleRegisterUpdate = (log: UpdateLog) => {
-    setAppState(prev => ({
-      ...prev,
-      updateHistory: [log, ...prev.updateHistory].slice(0, 20)
-    }));
-  };
-
   const handleAddVendedor = (name: string) => {
     if (!appState.vendedores.includes(name)) {
       setAppState(prev => ({ ...prev, vendedores: [...prev.vendedores, name].sort() }));
@@ -245,7 +229,10 @@ const App: React.FC = () => {
   };
 
   const handleSubmitRequest = (request: StockRequest) => {
-    setAppState(prev => ({ ...prev, requests: [request, ...prev.requests] }));
+    setAppState(prev => ({
+      ...prev,
+      requests: [request, ...prev.requests]
+    }));
   };
 
   const handleUpdateRequest = (updatedRequest: StockRequest) => {
@@ -256,11 +243,17 @@ const App: React.FC = () => {
   };
 
   const handleDeleteRequest = useCallback((requestId: string) => {
-    setAppState(prev => ({ ...prev, requests: prev.requests.filter(r => String(r.id) !== String(requestId)) }));
+    setAppState(prev => {
+      const filtered = prev.requests.filter(r => String(r.id) !== String(requestId));
+      return { ...prev, requests: filtered };
+    });
   }, []);
 
   const handleClearUserRequests = useCallback((solicitante: string) => {
-    setAppState(prev => ({ ...prev, requests: prev.requests.filter(r => r.solicitante !== solicitante) }));
+    setAppState(prev => ({
+      ...prev,
+      requests: prev.requests.filter(r => r.solicitante !== solicitante)
+    }));
   }, []);
 
   const handleUpdateRequestStatus = (requestId: string, status: StockRequest['status']) => {
@@ -281,7 +274,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sincronizando Dados...</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Carregando Marsil</p>
         </div>
       </div>
     );
@@ -301,10 +294,12 @@ const App: React.FC = () => {
                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Gestão de Estoque</p>
               </div>
             </div>
+
             <div className="flex items-center gap-4">
               <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
                 {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
+
               {authRole !== 'none' && (
                 <div className="flex items-center gap-2">
                   <div className="bg-gray-100 dark:bg-slate-800 p-1 rounded-xl flex">
@@ -320,6 +315,7 @@ const App: React.FC = () => {
           </div>
         </div>
       </header>
+
       <main className="flex-grow p-4 sm:p-8 flex flex-col items-center">
         {authRole === 'none' ? (
           !loginTarget ? (
@@ -328,6 +324,7 @@ const App: React.FC = () => {
                 <h2 className="text-4xl font-black dark:text-white tracking-tight">Painel de Estoque</h2>
                 <p className="text-gray-500 dark:text-slate-400 text-sm">Acesse para consultar itens e realizar pedidos.</p>
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <button onClick={() => setLoginTarget('vendedor')} className="group bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl hover:shadow-2xl border-2 border-transparent hover:border-emerald-500 transition-all flex flex-col items-center space-y-4">
                   <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all">
@@ -336,6 +333,7 @@ const App: React.FC = () => {
                   <h3 className="text-xl font-bold dark:text-white">Vendedor</h3>
                   <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Acessar <ChevronRight className="w-4 h-4 inline" /></p>
                 </button>
+
                 <button onClick={() => setLoginTarget('admin')} className="group bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl hover:shadow-2xl border-2 border-transparent hover:border-blue-500 transition-all flex flex-col items-center space-y-4">
                   <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
                     <ShieldCheck className="w-8 h-8 text-blue-600 group-hover:text-white" />
@@ -375,21 +373,9 @@ const App: React.FC = () => {
               onDeleteRequest={handleDeleteRequest}
               onClearUserRequests={handleClearUserRequests}
               onUpdateRequest={handleUpdateRequest}
-              isSyncing={isSyncing}
-              onManualRefresh={handleManualRefresh}
-              lastUpdate={appState.updateHistory[0]?.timestamp}
             />
           ) : (
-            <AdminPortal 
-              appState={appState} 
-              onUploadData={handleUploadData} 
-              onRegisterUpdate={handleRegisterUpdate}
-              onAddVendedor={handleAddVendedor} 
-              onRemoveVendedor={handleRemoveVendedor} 
-              onUpdateWhatsApp={handleUpdateWhatsApp} 
-              onUpdateRequestStatus={handleUpdateRequestStatus} 
-              onClearRequests={handleClearRequests} 
-            />
+            <AdminPortal appState={appState} onUploadData={handleUploadData} onAddVendedor={handleAddVendedor} onRemoveVendedor={handleRemoveVendedor} onUpdateWhatsApp={handleUpdateWhatsApp} onUpdateRequestStatus={handleUpdateRequestStatus} onClearRequests={handleClearRequests} />
           )
         )}
       </main>

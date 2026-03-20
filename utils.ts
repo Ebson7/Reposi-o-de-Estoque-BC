@@ -1,5 +1,4 @@
 
-
 export const calculateDiffPercent = (marsil: number, boraceia: number): number => {
   if (marsil === 0 && boraceia === 0) return 0;
   // Let's compare Marsil vs Boraceia. If Marsil is 100 and Boraceia is 20, Marsil has 400% more.

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Info } from 'lucide-react';
+import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
 
 interface UserPortalProps {
@@ -12,9 +12,6 @@ interface UserPortalProps {
   onDeleteRequest: (id: string) => void;
   onClearUserRequests: (solicitante: string) => void;
   onUpdateRequest: (req: StockRequest) => void;
-  isSyncing?: boolean;
-  onManualRefresh?: () => void;
-  lastUpdate?: string;
 }
 
 const UNIT_OPTIONS: UnitType[] = ['UN', 'CX', 'DP', 'PCT', 'PT', 'SC', 'FD'];
@@ -27,10 +24,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   onSubmitRequest,
   onDeleteRequest,
   onClearUserRequests,
-  onUpdateRequest,
-  isSyncing = false,
-  onManualRefresh,
-  lastUpdate
+  onUpdateRequest
 }) => {
   const [activeView, setActiveView] = useState<'consulta' | 'historico'>('consulta');
   const [filterCodigo, setFilterCodigo] = useState('');
@@ -84,8 +78,9 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
   const handleCopyFormattedList = () => {
     const dateStr = new Date().toLocaleDateString('pt-BR');
+    // Removido o label "UNIDADE:" após a quantidade no mapeamento do texto
     const itemsStr = myRequests.map(r => 
-      `QTD: ${r.quantidade} UNIDADE: ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`
+      `QTD: ${r.quantidade} ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}`
     ).join('\n');
     
     const fullText = `📦 PEDIDO MARSIL
@@ -181,8 +176,6 @@ Pedido Extra Boracéia`;
 
   const hasFilters = filterCodigo || filterDescricao || filterFornecedor;
 
-  const lastUpdateStr = lastUpdate ? new Date(lastUpdate).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A';
-
   return (
     <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-500">
       <div className={`p-6 rounded-3xl transition-all duration-500 border ${!solicitante ? 'bg-blue-600 border-blue-500 shadow-2xl shadow-blue-500/20 text-white' : 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 shadow-sm'}`}>
@@ -213,36 +206,19 @@ Pedido Extra Boracéia`;
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 w-fit">
-          <button 
-            onClick={() => setActiveView('consulta')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'consulta' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
-          >
-            <Search className="w-3.5 h-3.5" /> Consulta
-          </button>
-          <button 
-            onClick={() => setActiveView('historico')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'historico' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
-          >
-            <History className="w-3.5 h-3.5" /> Carrinho ({myRequests.length})
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="hidden xs:flex flex-col items-end">
-            <p className="text-[8px] font-black text-gray-400 uppercase leading-none">Última Sincronização</p>
-            <p className="text-[10px] font-bold text-blue-500 leading-tight">{lastUpdateStr}</p>
-          </div>
-          <button 
-            onClick={onManualRefresh}
-            disabled={isSyncing}
-            className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border shadow-sm ${isSyncing ? 'bg-gray-100 border-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 text-blue-600 hover:bg-blue-50'}`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Sincronizando...' : 'Atualizar Dados'}
-          </button>
-        </div>
+      <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 w-fit mx-auto sm:mx-0">
+        <button 
+          onClick={() => setActiveView('consulta')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'consulta' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
+        >
+          <Search className="w-3.5 h-3.5" /> Consulta de Itens
+        </button>
+        <button 
+          onClick={() => setActiveView('historico')}
+          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'historico' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
+        >
+          <History className="w-3.5 h-3.5" /> Meu Carrinho ({myRequests.length})
+        </button>
       </div>
 
       {activeView === 'consulta' ? (
@@ -311,7 +287,7 @@ Pedido Extra Boracéia`;
                     <div className="flex gap-4 mr-2">
                       <div className="text-right">
                         <p className="text-base font-black dark:text-white leading-none">{p.estoqueMarsil}</p>
-                        <p className="text-[8px] font-black uppercase text-gray-400 mt-1">Matriz</p>
+                        <p className="text-[8px] font-black uppercase text-gray-400 mt-1">Marsil</p>
                       </div>
                       <div className="text-right">
                         <p className="text-base font-black text-emerald-600 leading-none">{p.estoqueBoraceia}</p>
@@ -352,7 +328,7 @@ Pedido Extra Boracéia`;
           <div className="p-6 border-b border-gray-50 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center bg-gray-50/20 dark:bg-slate-800/20 gap-4">
             <div>
               <h3 className="text-sm font-black dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <History className="w-4 h-4 text-blue-500" /> Carrinho de Pedidos
+                <History className="w-4 h-4 text-blue-500" /> Histórico / Carrinho de Pedidos
               </h3>
               <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Vendedor Ativo: {solicitante || '---'}</p>
             </div>
@@ -479,13 +455,7 @@ Pedido Extra Boracéia`;
             <form onSubmit={handleSendRequest} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-400 px-1 flex items-center gap-1 group/tooltip relative">
-                    Quantidade
-                    <Info className="w-3 h-3 text-gray-300 cursor-help" />
-                    <span className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-48 p-2 bg-slate-800 text-white text-[9px] font-medium rounded-lg shadow-xl z-50 normal-case tracking-normal">
-                      Informe o volume desejado baseado na unidade (UN, CX, etc).
-                    </span>
-                  </label>
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-1">Quantidade</label>
                   <input type="number" min="1" required className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 rounded-xl font-bold dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner" value={quant} onChange={e => setQuant(parseInt(e.target.value))} />
                 </div>
                 <div className="space-y-1.5">
@@ -497,13 +467,7 @@ Pedido Extra Boracéia`;
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 px-1 flex items-center gap-1 group/tooltip relative">
-                  Natureza do Pedido
-                  <Info className="w-3 h-3 text-gray-300 cursor-help" />
-                  <span className="invisible group-hover/tooltip:visible absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-[9px] font-medium rounded-lg shadow-xl z-50 normal-case tracking-normal">
-                    Aposta: Previsão de venda futura. <br/> Garantida: Pedido para venda já realizada.
-                  </span>
-                </label>
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Natureza do Pedido</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" onClick={() => setType('Aposta na Venda')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Aposta na Venda' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Aposta na Venda</button>
                   <button type="button" onClick={() => setType('Venda Garantida')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Venda Garantida' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Venda Garantida</button>
