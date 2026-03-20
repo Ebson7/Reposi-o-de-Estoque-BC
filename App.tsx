@@ -71,12 +71,18 @@ const App: React.FC = () => {
     const savedVendedores = localStorage.getItem(VENDEDORES_KEY);
     const savedRequests = localStorage.getItem(REQUESTS_KEY);
 
-    let finalVendedores = DEFAULT_VENDEDORES;
+    // Função auxiliar para mesclar listas de vendedores garantindo que a lista padrão do código sempre esteja presente
+    const mergeWithDefault = (saved: string[]): string[] => {
+      const combined = [...DEFAULT_VENDEDORES, ...saved];
+      return Array.from(new Set(combined)).sort();
+    };
+
+    let finalVendedores = [...DEFAULT_VENDEDORES];
     if (savedVendedores) {
       try {
         const parsed = JSON.parse(savedVendedores);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          finalVendedores = parsed;
+        if (Array.isArray(parsed)) {
+          finalVendedores = mergeWithDefault(parsed);
         }
       } catch (e) {
         finalVendedores = DEFAULT_VENDEDORES;
@@ -122,15 +128,18 @@ const App: React.FC = () => {
       const urlSync = params.get('s');
       const urlVendors = params.get('v');
       
-      let initialVendedores = appState.vendedores;
+      // Sempre começa com a lista atual (que já tem o merge do DEFAULT + LocalStorage)
+      let currentVendedores = [...appState.vendedores];
 
-      // Se houver vendedores na URL, eles têm prioridade para sincronização
+      // Se houver vendedores na URL, mescla com a lista atual
       if (urlVendors) {
         try {
           const parsed = JSON.parse(decodeURIComponent(urlVendors));
           if (Array.isArray(parsed) && parsed.length > 0) {
-            initialVendedores = parsed;
-            localStorage.setItem(VENDEDORES_KEY, JSON.stringify(parsed));
+            // Mescla TUDO: Padrão do código + LocalStorage (em appState) + URL
+            const merged = Array.from(new Set([...DEFAULT_VENDEDORES, ...currentVendedores, ...parsed])).sort();
+            currentVendedores = merged;
+            localStorage.setItem(VENDEDORES_KEY, JSON.stringify(merged));
           }
         } catch (e) {
           console.error("Erro ao processar vendedores da URL", e);
@@ -148,17 +157,15 @@ const App: React.FC = () => {
             setAppState(prev => ({ 
               ...prev, 
               products: mapped,
-              vendedores: initialVendedores 
+              vendedores: currentVendedores 
             }));
             setIsLoading(false);
           },
           error: () => setIsLoading(false)
         });
       } else {
-        // Se não houver link de sincronização, apenas atualiza os vendedores se vieram da URL
-        if (urlVendors) {
-          setAppState(prev => ({ ...prev, vendedores: initialVendedores }));
-        }
+        // Se não houver link de sincronização, apenas atualiza os vendedores se houve mudança (URL ou merge)
+        setAppState(prev => ({ ...prev, vendedores: currentVendedores }));
         setTimeout(() => setIsLoading(false), 800);
       }
     };
