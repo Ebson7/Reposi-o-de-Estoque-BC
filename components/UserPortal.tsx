@@ -101,17 +101,25 @@ export const UserPortal: React.FC<UserPortalProps> = ({
     // 4. Descrição (o que sobrar ou o termo principal)
     let desc = q;
     
-    // Removemos os termos de fornecedor e código se encontrados
-    if (result.fornecedor) desc = desc.replace(result.fornecedor, '');
-    if (result.codigo) desc = desc.replace(result.codigo, '');
+    // Removemos os termos de fornecedor e código se encontrados (case-insensitive)
+    if (result.fornecedor) {
+      desc = desc.replace(new RegExp(result.fornecedor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
+    }
+    if (result.codigo) {
+      desc = desc.replace(new RegExp(result.codigo, 'gi'), ' ');
+    }
     
     // Removemos termos de situação se encontrados
     Object.values(situations).flat().forEach(term => {
-      desc = desc.replace(term, '');
+      desc = desc.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
     });
 
     // Limpeza de stop words comuns em buscas
-    const stopWords = ['me', 'mostre', 'liste', 'procure', 'busque', 'todos', 'os', 'as', 'do', 'da', 'de', 'em', 'com', 'no', 'na', 'um', 'uma', 'sobre', 'ítens', 'itens', 'produtos'];
+    const stopWords = [
+      'me', 'mostre', 'liste', 'procure', 'busque', 'todos', 'os', 'as', 'do', 'da', 'de', 'em', 
+      'com', 'no', 'na', 'um', 'uma', 'sobre', 'ítens', 'itens', 'produtos', 'por', 'favor', 
+      'quero', 'ver', 'quais', 'tem', 'temos', 'estoque', 'disponíveis'
+    ];
     const words = desc.split(/[\s,.-]+/).filter(w => !stopWords.includes(w) && w.length > 1);
     
     result.descricao = words.join(' ').trim();
