@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Bot, Sparkles, Wand2, Loader2, Mic, MicOff } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
-import { parseSearchQuery } from '../services/geminiService';
+import { parseSearchQuery } from './services/geminiService';
 
 interface UserPortalProps {
   products: Product[];
