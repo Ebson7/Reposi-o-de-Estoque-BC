@@ -1,7 +1,8 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Bot, Sparkles, Wand2, Loader2, Mic, MicOff } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
+import { parseSearchQuery } from '../services/geminiService';
 
 interface UserPortalProps {
   products: Product[];
@@ -45,6 +46,11 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const [filterFornecedor, setFilterFornecedor] = useState('');
   const [filterSituacao, setFilterSituacao] = useState('');
   
+  const [assistantQuery, setAssistantQuery] = useState('');
+  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
   const [selected, setSelected] = useState<Product | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
@@ -115,6 +121,66 @@ Pedido Extra Boracéia`;
     if (window.confirm('Deseja realmente excluir TODOS os itens do seu pedido atual?')) {
       onClearUserRequests(solicitante);
     }
+  };
+
+  const handleAssistantSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assistantQuery.trim()) return;
+
+    setIsAssistantLoading(true);
+    try {
+      const filters = await parseSearchQuery(assistantQuery);
+      setFilterCodigo(filters.codigo || '');
+      setFilterDescricao(filters.descricao || '');
+      setFilterFornecedor(filters.fornecedor || '');
+      setFilterSituacao(filters.situacao || '');
+      setAssistantQuery('');
+      setShowAssistant(false);
+    } catch (error) {
+      console.error("Erro na busca inteligente:", error);
+    } finally {
+      setIsAssistantLoading(false);
+    }
+  };
+
+  const toggleVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert('A busca por voz não é suportada neste navegador.');
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAssistantQuery(transcript);
+      setIsListening(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Erro no reconhecimento de voz:', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
   };
 
   const handleEditRequest = (req: StockRequest) => {
@@ -244,11 +310,20 @@ Pedido Extra Boracéia`;
         <div className={`space-y-6 transition-opacity duration-300 ${!solicitante ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800">
             <div className="flex justify-between items-end mb-6">
-              <div>
-                <h2 className="text-base font-black flex items-center gap-2 uppercase tracking-widest dark:text-white mb-1">
-                  <Filter className="w-5 h-5 text-blue-600" /> Pesquisa Avançada
-                </h2>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Busca por Código, Descrição ou Fabricante</p>
+              <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-base font-black flex items-center gap-2 uppercase tracking-widest dark:text-white mb-1">
+                    <Filter className="w-5 h-5 text-blue-600" /> Pesquisa Avançada
+                  </h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Busca por Código, Descrição ou Fabricante</p>
+                </div>
+                <button 
+                  onClick={() => setShowAssistant(!showAssistant)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showAssistant ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400'}`}
+                >
+                  <Bot className="w-4 h-4" />
+                  {showAssistant ? 'Fechar CHOCOIA' : 'Pergunte à CHOCOIA'}
+                </button>
               </div>
               {hasFilters && (
                 <button onClick={() => { setFilterCodigo(''); setFilterDescricao(''); setFilterFornecedor(''); setFilterSituacao(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline flex items-center gap-1 pb-1">
@@ -257,7 +332,47 @@ Pedido Extra Boracéia`;
               )}
             </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            {showAssistant && (
+              <form onSubmit={handleAssistantSearch} className="mb-8 p-6 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl shadow-xl shadow-indigo-500/20 animate-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center gap-3 mb-3">
+                  <Bot className="w-6 h-6 text-indigo-100" />
+                  <p className="text-xs font-black text-white uppercase tracking-wider">Olá, eu sou a CHOCOIA! Como posso ajudar na sua busca?</p>
+                </div>
+                <div className="relative group">
+                  <input 
+                    autoFocus
+                    type="text" 
+                    placeholder={isListening ? "Ouvindo... Fale agora." : "Ex: Liste todos os Snickers da Nestlé em promoção..."} 
+                    className={`w-full pl-6 pr-28 py-4 rounded-2xl bg-white/10 border text-white placeholder:text-white/40 text-sm font-bold outline-none focus:ring-2 focus:ring-white/30 transition-all backdrop-blur-sm ${isListening ? 'border-red-400 ring-2 ring-red-400/50' : 'border-white/20'}`}
+                    value={assistantQuery}
+                    onChange={(e) => setAssistantQuery(e.target.value)}
+                    disabled={isAssistantLoading}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button 
+                      type="button"
+                      onClick={toggleVoiceSearch}
+                      disabled={isAssistantLoading}
+                      className={`p-2.5 rounded-xl shadow-lg transition-all active:scale-95 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/20 text-white hover:bg-white/30'}`}
+                      title={isListening ? "Parar de ouvir" : "Ativar busca por voz"}
+                    >
+                      {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={isAssistantLoading || !assistantQuery.trim()}
+                      className="p-2.5 bg-white text-indigo-600 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
+                      title="Enviar pesquisa"
+                    >
+                      {isAssistantLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-3 text-[9px] text-indigo-100 font-bold uppercase tracking-wider opacity-70">Eu vou preencher os filtros automaticamente para você.</p>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div className="relative group">
                   <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
                   <input type="text" placeholder="Código Item" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterCodigo} onChange={(e) => setFilterCodigo(e.target.value)} />
@@ -276,7 +391,30 @@ Pedido Extra Boracéia`;
                 </div>
               </div>
 
-            <div className="mt-8 space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
+            {/* CHOCOIA Floating Button */}
+      <div className="fixed bottom-6 right-6 z-50 group pointer-events-none sm:pointer-events-auto">
+        {!showAssistant && (
+          <div className="absolute bottom-full right-0 mb-4 px-4 py-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-700 animate-bounce text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-indigo-600 dark:text-indigo-400">
+            Pergunte à CHOCOIA! 👋
+          </div>
+        )}
+        <button
+          onClick={() => {
+            setActiveView('consulta');
+            setShowAssistant(true);
+            setTimeout(() => {
+              const input = document.querySelector('input[placeholder*="CHOCOIA"]') as HTMLInputElement;
+              input?.focus();
+            }, 100);
+          }}
+          className="pointer-events-auto w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shadow-2xl shadow-indigo-500/40 flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all group-hover:rotate-12"
+          title="Abrir CHOCOIA"
+        >
+          <Bot className="w-7 h-7" />
+        </button>
+      </div>
+
+      <div className="mt-8 space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
               {filteredProducts.map(p => (
                 <div key={p.id} className={`group w-full p-5 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${selected?.id === p.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500/20' : 'border-gray-50 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/60'}`}>
                   <div className="text-left flex-grow">
