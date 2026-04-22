@@ -2,8 +2,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Bot, Sparkles, Wand2, Loader2, Mic, MicOff } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
-import { parseSearchQuery } from './geminiService';
 
+interface SearchFilters {
+  codigo: string;
+  descricao: string;
+  fornecedor: string;
+  situacao: string;
+}
 interface UserPortalProps {
   products: Product[];
   requests: StockRequest[];
@@ -51,6 +56,69 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const [showAssistant, setShowAssistant] = useState(false);
   const [isListening, setIsListening] = useState(false);
 
+  // IA Local (CHOCOIA) - Parsing inteligente sem API externa
+  const parseSearchQueryLocal = (query: string): SearchFilters => {
+    const q = query.toLowerCase().trim();
+    const result: SearchFilters = { codigo: '', descricao: '', fornecedor: '', situacao: '' };
+
+    if (!q) return result;
+
+    // 1. Tentar encontrar código (números com 3+ dígitos)
+    const codigoMatch = q.match(/\b\d{3,}\b/);
+    if (codigoMatch) {
+      result.codigo = codigoMatch[0];
+    }
+
+    // 2. Tentar encontrar situações
+    const situations = {
+      'pr': ['promoção', 'promo', 'liquidar', 'oferta'],
+      'dv': ['validade', 'vencimento', 'curta', 'vencendo'],
+      'ex': ['externo', 'mercado', 'concorrência'],
+      'no': ['normal', 'padrão', 'regular'],
+      'ft': ['falta', 'acabou', 'esgotado', 'indisponível'],
+      'pc': ['proibida', 'bloqueado']
+    };
+
+    for (const [key, terms] of Object.entries(situations)) {
+      if (terms.some(t => q.includes(t))) {
+        result.situacao = key.toUpperCase();
+        break;
+      }
+    }
+
+    // 3. Tentar encontrar fornecedor (marcas conhecidas no catálogo)
+    // Ordenamos por tamanho para pegar nomes mais específicos primeiro
+    const uniqueFornecedores = Array.from(new Set(products.map(p => p.fornecedor.toLowerCase())))
+      .sort((a, b) => b.length - a.length);
+
+    for (const forn of uniqueFornecedores) {
+      if (forn.length > 2 && q.includes(forn)) {
+        result.fornecedor = forn;
+        break;
+      }
+    }
+
+    // 4. Descrição (o que sobrar ou o termo principal)
+    let desc = q;
+    
+    // Removemos os termos de fornecedor e código se encontrados
+    if (result.fornecedor) desc = desc.replace(result.fornecedor, '');
+    if (result.codigo) desc = desc.replace(result.codigo, '');
+    
+    // Removemos termos de situação se encontrados
+    Object.values(situations).flat().forEach(term => {
+      desc = desc.replace(term, '');
+    });
+
+    // Limpeza de stop words comuns em buscas
+    const stopWords = ['me', 'mostre', 'liste', 'procure', 'busque', 'todos', 'os', 'as', 'do', 'da', 'de', 'em', 'com', 'no', 'na', 'um', 'uma', 'sobre', 'ítens', 'itens', 'produtos'];
+    const words = desc.split(/[\s,.-]+/).filter(w => !stopWords.includes(w) && w.length > 1);
+    
+    result.descricao = words.join(' ').trim();
+
+    return result;
+  };
+
   const [selected, setSelected] = useState<Product | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
@@ -78,9 +146,15 @@ export const UserPortal: React.FC<UserPortalProps> = ({
     
     return products.filter(p => {
       const matchCod = !cod || String(p.codigo).toLowerCase().includes(cod);
-      const matchDesc = !desc || p.produto.toLowerCase().includes(desc);
+      
+      // Busca flexível por descrição: se houver várias palavras, todas devem estar presentes no nome ou sabor do produto
+      const descKeywords = desc.split(/\s+/).filter(k => k.length > 0);
+      const productNameFull = `${p.produto} ${p.sabor || ''}`.toLowerCase();
+      const matchDesc = descKeywords.length === 0 || descKeywords.every(kw => productNameFull.includes(kw));
+
       const matchForn = !forn || p.fornecedor.toLowerCase().includes(forn);
       const matchSit = !sit || (p.situacao && p.situacao.toLowerCase().includes(sit));
+      
       return matchCod && matchDesc && matchForn && matchSit;
     }).slice(0, 40);
   }, [products, filterCodigo, filterDescricao, filterFornecedor, filterSituacao]);
@@ -128,19 +202,24 @@ Pedido Extra Boracéia`;
     if (!assistantQuery.trim()) return;
 
     setIsAssistantLoading(true);
-    try {
-      const filters = await parseSearchQuery(assistantQuery);
-      setFilterCodigo(filters.codigo || '');
-      setFilterDescricao(filters.descricao || '');
-      setFilterFornecedor(filters.fornecedor || '');
-      setFilterSituacao(filters.situacao || '');
-      setAssistantQuery('');
-      setShowAssistant(false);
-    } catch (error) {
-      console.error("Erro na busca inteligente:", error);
-    } finally {
-      setIsAssistantLoading(false);
-    }
+    
+    // Simula um delay de processamento para parecer IA
+    setTimeout(() => {
+      try {
+        const filters = parseSearchQueryLocal(assistantQuery);
+        setFilterCodigo(filters.codigo || '');
+        setFilterDescricao(filters.descricao || '');
+        setFilterFornecedor(filters.fornecedor || '');
+        setFilterSituacao(filters.situacao || '');
+        
+        setAssistantQuery('');
+        setShowAssistant(false);
+      } catch (error) {
+        console.error("Erro na busca inteligente local:", error);
+      } finally {
+        setIsAssistantLoading(false);
+      }
+    }, 800);
   };
 
   const toggleVoiceSearch = () => {
@@ -475,10 +554,16 @@ Pedido Extra Boracéia`;
                 </div>
               ))}
               
-              {!hasFilters && (
+              {filteredProducts.length === 0 && (
                 <div className="text-center py-32 opacity-20 flex flex-col items-center">
                   <Search className="w-16 h-16 mb-4" />
-                  <p className="text-xs font-black uppercase tracking-widest">Utilize os filtros acima para pesquisar o catálogo</p>
+                  <p className="text-xs font-black uppercase tracking-widest px-6">
+                    {hasFilters 
+                      ? "Nenhum produto encontrado com esses filtros." 
+                      : products.length === 0 
+                        ? "Nenhum produto carregado no sistema. Importe dados no painel Admin ou via link de sincronização."
+                        : "Utilize os filtros acima ou fale com a CHOCOIA para pesquisar o catálogo"}
+                  </p>
                 </div>
               )}
             </div>
