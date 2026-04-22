@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Bot, Sparkles, Wand2, Loader2, Mic, MicOff } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
+import { parseSearchQueryWithGemini } from './geminiService';
 
 interface SearchFilters {
   codigo: string;
@@ -211,9 +212,20 @@ Pedido Extra Boracéia`;
 
     setIsAssistantLoading(true);
     
-    // Simula um delay de processamento para parecer IA
-    setTimeout(() => {
+    try {
+      // Tentar usar o Gemini primeiro
       try {
+        const filters = await parseSearchQueryWithGemini(assistantQuery);
+        setFilterCodigo(filters.codigo || '');
+        setFilterDescricao(filters.descricao || '');
+        setFilterFornecedor(filters.fornecedor || '');
+        setFilterSituacao(filters.situacao || '');
+        
+        setAssistantQuery('');
+        setShowAssistant(false);
+      } catch (geminiError) {
+        console.warn("Gemini falhou, usando IA local como fallback:", geminiError);
+        // Fallback para a lógica local se o Gemini falhar
         const filters = parseSearchQueryLocal(assistantQuery);
         setFilterCodigo(filters.codigo || '');
         setFilterDescricao(filters.descricao || '');
@@ -222,12 +234,12 @@ Pedido Extra Boracéia`;
         
         setAssistantQuery('');
         setShowAssistant(false);
-      } catch (error) {
-        console.error("Erro na busca inteligente local:", error);
-      } finally {
-        setIsAssistantLoading(false);
       }
-    }, 800);
+    } catch (error) {
+      console.error("Erro total na busca inteligente:", error);
+    } finally {
+      setIsAssistantLoading(false);
+    }
   };
 
   const toggleVoiceSearch = () => {
