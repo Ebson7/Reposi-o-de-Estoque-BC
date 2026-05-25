@@ -36,32 +36,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const mapData = (data: any[]) => {
     return data.map((row: any, i: number) => {
       const findVal = (keys: string[]) => {
-        const key = Object.keys(row).find(k => 
-          keys.some(s => k.trim().toLowerCase() === s.toLowerCase()) ||
-          keys.some(s => k.trim().toLowerCase().includes(s.toLowerCase()))
-        );
-        return key ? String(row[key]).trim() : '';
+        const key = Object.keys(row).find(k => {
+          if (!k) return false;
+          const cleanK = String(k).replace(/^["']|["']$/g, '').trim().toLowerCase();
+          return keys.some(s => cleanK === s.toLowerCase() || cleanK.includes(s.toLowerCase()));
+        });
+        return key ? String(row[key]).replace(/^["']|["']$/g, '').trim() : '';
       };
 
       return {
         id: `p-${i}-${Date.now()}`,
         fornecedor: findVal(['Fornecedor', 'Forn', 'Marca', 'Fabricante']),
-        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo', 'ID', 'Referência']),
+        codigo: findVal(['Código', 'Cód', 'Ref', 'Cod Item', 'Item', 'codigo', 'ID', 'Referência', 'novo codigo']),
         situacao: findVal(['Situação', 'Status', 'Sit', 'Disponibilidade']),
         comprador: findVal(['Comprador', 'Responsável', 'Buyer']),
         produto: findVal(['Produto', 'Descrição', 'Nome', 'Desc', 'produto']),
         sabor: findVal(['Sabor', 'Gosto', 'Flavor', 'Variante']),
         embalagem: findVal(['Embalagem', 'Emb', 'Pack']),
-        estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz'])) || 0,
-        estoqueBoraceia: parseInt(findVal(['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia'])) || 0,
+        estoqueMarsil: parseInt(findVal(['Marsil', 'SP', 'Estoque Marsil', 'Matriz', 'estoque_marsil'])) || 0,
+        estoqueBoraceia: parseInt(findVal(['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia', 'estoque_boraceia'])) || 0,
       };
     }).filter(p => p.produto && p.produto !== '');
   };
 
   const processData = (content: string) => {
+    const firstLine = content.split('\n')[0] || '';
+    const detectedDelimiter = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
     Papa.parse(content, {
       header: true,
       skipEmptyLines: true,
+      delimiter: detectedDelimiter,
       complete: (results) => {
         const mapped = mapData(results.data);
         if (mapped.length === 0) {
@@ -105,9 +109,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       if (!res.ok) throw new Error("Erro de resposta do proxy");
       const csvText = await res.text();
 
+      const firstLine = csvText.split('\n')[0] || '';
+      const detectedDelimiter = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
       Papa.parse(csvText, {
         header: true,
         skipEmptyLines: true,
+        delimiter: detectedDelimiter,
         complete: (results) => {
           const mapped = mapData(results.data);
           if (mapped.length > 0) {
