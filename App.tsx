@@ -147,9 +147,26 @@ const App: React.FC = () => {
         }
       }
 
-      if (urlSync) {
-        localStorage.setItem(SYNC_URL_KEY, urlSync);
-        const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlSync)}`;
+      const finalSyncUrl = (urlSync || localStorage.getItem(SYNC_URL_KEY) || "").trim();
+
+      if (finalSyncUrl) {
+        if (urlSync) {
+          localStorage.setItem(SYNC_URL_KEY, urlSync);
+        }
+        
+        // Smart Google Sheets URL conversion
+        let targetUrl = finalSyncUrl;
+        if (finalSyncUrl.includes("docs.google.com/spreadsheets") && !finalSyncUrl.includes("/pub") && !finalSyncUrl.includes("/export")) {
+          const match = finalSyncUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+          if (match && match[1]) {
+            const spreadsheetId = match[1];
+            const gidMatch = finalSyncUrl.match(/[#&?]gid=([0-9]+)/);
+            const gid = gidMatch ? gidMatch[1] : '0';
+            targetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+          }
+        }
+
+        const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
         fetch(proxyUrl)
           .then(res => {
             if (!res.ok) throw new Error("Resposta do proxy não foi OK");

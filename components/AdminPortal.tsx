@@ -98,11 +98,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const handleSyncFromUrl = async () => {
     if (!syncUrl) return;
+    const trimmedUrl = syncUrl.trim();
     setIsSyncing(true);
     setUploadStatus({ message: 'Sincronizando via link...', type: 'info' });
-    localStorage.setItem('marsil_sync_url', syncUrl);
+    localStorage.setItem('marsil_sync_url', trimmedUrl);
 
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(syncUrl)}`;
+    // Smart Google Sheets URL conversion
+    let targetUrl = trimmedUrl;
+    if (trimmedUrl.includes("docs.google.com/spreadsheets") && !trimmedUrl.includes("/pub") && !trimmedUrl.includes("/export")) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (match && match[1]) {
+        const spreadsheetId = match[1];
+        const gidMatch = trimmedUrl.match(/[#&?]gid=([0-9]+)/);
+        const gid = gidMatch ? gidMatch[1] : '0';
+        targetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+      }
+    }
+
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
 
     try {
       const res = await fetch(proxyUrl);
@@ -139,11 +152,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const handleGenerateShareLink = () => {
     if (!syncUrl) return;
+    const trimmedUrl = syncUrl.trim();
     const baseUrl = window.location.origin + window.location.pathname;
     
     // Inclui os vendedores no link para garantir que apareçam para quem recebe
     const vendorsEncoded = encodeURIComponent(JSON.stringify(appState.vendedores));
-    const shareUrl = `${baseUrl}?s=${encodeURIComponent(syncUrl)}&v=${vendorsEncoded}`;
+    const shareUrl = `${baseUrl}?s=${encodeURIComponent(trimmedUrl)}&v=${vendorsEncoded}`;
     
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);

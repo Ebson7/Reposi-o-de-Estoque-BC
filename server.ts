@@ -8,7 +8,8 @@ async function startServer() {
 
   // Endpoint do Proxy
   app.get("/api/proxy", async (req, res): Promise<void> => {
-    const targetUrl = req.query.url as string;
+    const rawUrl = req.query.url as string;
+    const targetUrl = rawUrl ? rawUrl.trim() : "";
     if (!targetUrl) {
       res.status(400).json({ error: "Faltando o parâmetro url" });
       return;
