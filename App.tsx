@@ -166,10 +166,13 @@ const App: React.FC = () => {
           }
         }
 
-        const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
-        fetch(proxyUrl)
+        // Se for um link do Google Sheets, consome diretamente no cliente (CORS nativo)
+        const isGoogleSheets = targetUrl.includes("docs.google.com/spreadsheets");
+        const fetchUrl = isGoogleSheets ? targetUrl : `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+
+        fetch(fetchUrl)
           .then(res => {
-            if (!res.ok) throw new Error("Resposta do proxy não foi OK");
+            if (!res.ok) throw new Error("Resposta de carregamento não foi OK");
             return res.text();
           })
           .then(csvText => {

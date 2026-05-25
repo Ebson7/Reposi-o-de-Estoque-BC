@@ -115,11 +115,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       }
     }
 
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+    // Se for um link do Google Sheets, consome diretamente no cliente (CORS nativo)
+    const isGoogleSheets = targetUrl.includes("docs.google.com/spreadsheets");
+    const fetchUrl = isGoogleSheets ? targetUrl : `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
 
     try {
-      const res = await fetch(proxyUrl);
-      if (!res.ok) throw new Error("Erro de resposta do proxy");
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error("Erro de resposta ao carregar");
       const csvText = await res.text();
 
       const firstLine = csvText.split('\n')[0] || '';
