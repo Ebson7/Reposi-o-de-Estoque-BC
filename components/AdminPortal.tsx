@@ -98,26 +98,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setUploadStatus({ message: 'Sincronizando via link...', type: 'info' });
     localStorage.setItem('marsil_sync_url', syncUrl);
 
-    Papa.parse(syncUrl, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const mapped = mapData(results.data);
-        if (mapped.length > 0) {
-          onUploadData(mapped);
-          setUploadStatus({ message: `Sincronizado! ${mapped.length} itens atualizados.`, type: 'success' });
-        } else {
-          setUploadStatus({ message: 'Nenhum dado encontrado no link.', type: 'error' });
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(syncUrl)}`;
+
+    try {
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error("Erro de resposta do proxy");
+      const csvText = await res.text();
+
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const mapped = mapData(results.data);
+          if (mapped.length > 0) {
+            onUploadData(mapped);
+            setUploadStatus({ message: `Sincronizado! ${mapped.length} itens atualizados.`, type: 'success' });
+          } else {
+            setUploadStatus({ message: 'Nenhum dado encontrado no link.', type: 'error' });
+          }
+          setIsSyncing(false);
+          setTimeout(() => setUploadStatus(null), 5000);
+        },
+        error: () => {
+          setUploadStatus({ message: 'Erro ao analisar os dados do CSV.', type: 'error' });
+          setIsSyncing(false);
         }
-        setIsSyncing(false);
-        setTimeout(() => setUploadStatus(null), 5000);
-      },
-      error: () => {
-        setUploadStatus({ message: 'Erro ao conectar. Verifique se o link CSV é público.', type: 'error' });
-        setIsSyncing(false);
-      }
-    });
+      });
+    } catch (err) {
+      setUploadStatus({ message: 'Erro ao conectar. Verifique se o link CSV é válido.', type: 'error' });
+      setIsSyncing(false);
+    }
   };
 
   const handleGenerateShareLink = () => {

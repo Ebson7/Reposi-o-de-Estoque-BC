@@ -148,21 +148,32 @@ const App: React.FC = () => {
 
       if (urlSync) {
         localStorage.setItem(SYNC_URL_KEY, urlSync);
-        Papa.parse(urlSync, {
-          download: true,
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const mapped = mapCSVData(results.data);
-            setAppState(prev => ({ 
-              ...prev, 
-              products: mapped,
-              vendedores: currentVendedores 
-            }));
+        const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlSync)}`;
+        fetch(proxyUrl)
+          .then(res => {
+            if (!res.ok) throw new Error("Resposta do proxy não foi OK");
+            return res.text();
+          })
+          .then(csvText => {
+            Papa.parse(csvText, {
+              header: true,
+              skipEmptyLines: true,
+              complete: (results) => {
+                const mapped = mapCSVData(results.data);
+                setAppState(prev => ({ 
+                  ...prev, 
+                  products: mapped,
+                  vendedores: currentVendedores 
+                }));
+                setIsLoading(false);
+              },
+              error: () => setIsLoading(false)
+            });
+          })
+          .catch(err => {
+            console.error("Erro ao carregar dados pelo proxy:", err);
             setIsLoading(false);
-          },
-          error: () => setIsLoading(false)
-        });
+          });
       } else {
         // Se não houver link de sincronização, apenas atualiza os vendedores se houve mudança (URL ou merge)
         setAppState(prev => ({ ...prev, vendedores: currentVendedores }));
