@@ -166,14 +166,25 @@ const App: React.FC = () => {
           }
         }
 
-        // Se for um link do Google Sheets, consome diretamente no cliente (CORS nativo)
-        const isGoogleSheets = targetUrl.includes("docs.google.com/spreadsheets");
-        const fetchUrl = isGoogleSheets ? targetUrl : `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+        // Tenta usar o proxy do servidor como primeira opção (para evitar CORS).
+        // Se falhar ou se o servidor retornar HTML (que indica fallback de rota SPA no servidor), tenta busca direta como backup.
+        const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&_t=${Date.now()}`;
 
-        fetch(fetchUrl)
+        fetch(proxyUrl)
           .then(res => {
-            if (!res.ok) throw new Error("Resposta de carregamento não foi OK");
+            if (!res.ok) throw new Error("Resposta de carregamento pelo proxy não foi OK");
+            const contentType = res.headers.get("content-type") || "";
+            if (contentType.includes("text/html")) {
+              throw new Error("Proxy retornou HTML inesperado");
+            }
             return res.text();
+          })
+          .catch(err => {
+            console.warn("Falha no proxy, tentando busca direta (CORS backup):", err);
+            return fetch(targetUrl).then(res => {
+              if (!res.ok) throw new Error("Resposta de carregamento direto também falhou");
+              return res.text();
+            });
           })
           .then(csvText => {
             const firstLine = csvText.split('\n')[0] || '';

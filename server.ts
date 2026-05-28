@@ -28,6 +28,11 @@ async function startServer() {
         res.setHeader("content-type", contentType);
       }
 
+      // Desativar cache para garantir que sempre retorne dados novos
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+
       // Evitar erros de CORS encaminhando o arquivo como Buffer
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);

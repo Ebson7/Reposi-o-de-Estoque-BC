@@ -115,14 +115,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       }
     }
 
-    // Se for um link do Google Sheets, consome diretamente no cliente (CORS nativo)
-    const isGoogleSheets = targetUrl.includes("docs.google.com/spreadsheets");
-    const fetchUrl = isGoogleSheets ? targetUrl : `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+    // Tenta usar o proxy do servidor como primeira opção (para evitar CORS).
+    // Se falhar ou se o servidor retornar HTML (que indica fallback de rota SPA no servidor), tenta busca direta como backup.
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&_t=${Date.now()}`;
 
     try {
-      const res = await fetch(fetchUrl);
-      if (!res.ok) throw new Error("Erro de resposta ao carregar");
-      const csvText = await res.text();
+      let csvText = "";
+      try {
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Erro de resposta ao carregar via proxy");
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          throw new Error("Proxy retornou HTML");
+        }
+        csvText = await res.text();
+      } catch (proxyError) {
+        console.warn("Proxy falhou, tentando busca direta (CORS backup):", proxyError);
+        const resDirect = await fetch(targetUrl);
+        if (!resDirect.ok) throw new Error("Erro de resposta ao carregar direto");
+        csvText = await resDirect.text();
+      }
 
       const firstLine = csvText.split('\n')[0] || '';
       const detectedDelimiter = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
