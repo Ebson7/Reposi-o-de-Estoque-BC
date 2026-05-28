@@ -166,26 +166,54 @@ const App: React.FC = () => {
           }
         }
 
-        // Tenta usar o proxy do servidor como primeira opção (para evitar CORS).
-        // Se falhar ou se o servidor retornar HTML (que indica fallback de rota SPA no servidor), tenta busca direta como backup.
-        const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&_t=${Date.now()}`;
-
-        fetch(proxyUrl)
-          .then(res => {
-            if (!res.ok) throw new Error("Resposta de carregamento pelo proxy não foi OK");
-            const contentType = res.headers.get("content-type") || "";
-            if (contentType.includes("text/html")) {
-              throw new Error("Proxy retornou HTML inesperado");
+        const robustFetchCSV = async (url: string): Promise<string> => {
+          // 1. Tenta proxy local do servidor
+          try {
+            const localProxyUrl = `/api/proxy?url=${encodeURIComponent(url)}&_t=${Date.now()}`;
+            const res = await fetch(localProxyUrl);
+            if (res.ok) {
+              const contentType = res.headers.get("content-type") || "";
+              if (!contentType.includes("text/html")) {
+                const text = await res.text();
+                if (text && text.length > 50 && !text.trim().startsWith("<!DOCTYPE") && !text.trim().startsWith("<html")) {
+                  return text;
+                }
+              }
             }
-            return res.text();
-          })
-          .catch(err => {
-            console.warn("Falha no proxy, tentando busca direta (CORS backup):", err);
-            return fetch(targetUrl).then(res => {
-              if (!res.ok) throw new Error("Resposta de carregamento direto também falhou");
-              return res.text();
-            });
-          })
+          } catch (e) {
+            console.warn("Proxy local do servidor falhou ou indisponível:", e);
+          }
+
+          // 2. Tenta proxy público Codetabs (CORS-free e estável)
+          try {
+            const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+            const res = await fetch(codetabsUrl);
+            if (res.ok) {
+              const text = await res.text();
+              if (text && text.length > 50 && !text.trim().startsWith("<!DOCTYPE") && !text.trim().startsWith("<html") && !text.includes(`"error"`)) {
+                return text;
+              }
+            }
+          } catch (e) {
+            console.warn("Proxy público Codetabs falhou:", e);
+          }
+
+          // 3. Tenta busca direta como backup de última hora
+          try {
+            const res = await fetch(url);
+            if (res.ok) {
+              const text = await res.text();
+              return text;
+            }
+          } catch (e) {
+            console.warn("Sincronização direta também falhou:", e);
+            throw e;
+          }
+
+          throw new Error("Falha ao se conectar a todas as fontes de sincronização do link.");
+        };
+
+        robustFetchCSV(targetUrl)
           .then(csvText => {
             const firstLine = csvText.split('\n')[0] || '';
             const detectedDelimiter = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
@@ -206,7 +234,7 @@ const App: React.FC = () => {
             });
           })
           .catch(err => {
-            console.error("Erro ao carregar dados pelo proxy:", err);
+            console.error("Erro ao carregar dados da planilha:", err);
             setIsLoading(false);
           });
       } else {

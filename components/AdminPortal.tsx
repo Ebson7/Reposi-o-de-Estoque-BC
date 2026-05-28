@@ -115,27 +115,55 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       }
     }
 
-    // Tenta usar o proxy do servidor como primeira opção (para evitar CORS).
-    // Se falhar ou se o servidor retornar HTML (que indica fallback de rota SPA no servidor), tenta busca direta como backup.
-    const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}&_t=${Date.now()}`;
-
-    try {
-      let csvText = "";
+    const robustFetchCSV = async (url: string): Promise<string> => {
+      // 1. Tenta proxy local do servidor
       try {
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error("Erro de resposta ao carregar via proxy");
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("text/html")) {
-          throw new Error("Proxy retornou HTML");
+        const localProxyUrl = `/api/proxy?url=${encodeURIComponent(url)}&_t=${Date.now()}`;
+        const res = await fetch(localProxyUrl);
+        if (res.ok) {
+          const contentType = res.headers.get("content-type") || "";
+          if (!contentType.includes("text/html")) {
+            const text = await res.text();
+            if (text && text.length > 50 && !text.trim().startsWith("<!DOCTYPE") && !text.trim().startsWith("<html")) {
+              return text;
+            }
+          }
         }
-        csvText = await res.text();
-      } catch (proxyError) {
-        console.warn("Proxy falhou, tentando busca direta (CORS backup):", proxyError);
-        const resDirect = await fetch(targetUrl);
-        if (!resDirect.ok) throw new Error("Erro de resposta ao carregar direto");
-        csvText = await resDirect.text();
+      } catch (e) {
+        console.warn("Proxy local do servidor falhou ou indisponível:", e);
       }
 
+      // 2. Tenta proxy público Codetabs (CORS-free e estável)
+      try {
+        const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+        const res = await fetch(codetabsUrl);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.length > 50 && !text.trim().startsWith("<!DOCTYPE") && !text.trim().startsWith("<html") && !text.includes(`"error"`)) {
+            return text;
+          }
+        }
+      } catch (e) {
+        console.warn("Proxy público Codetabs falhou:", e);
+      }
+
+      // 3. Tenta busca direta como backup de última hora
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const text = await res.text();
+          return text;
+        }
+      } catch (e) {
+        console.warn("Sincronização direta também falhou:", e);
+        throw e;
+      }
+
+      throw new Error("Falha ao se conectar a todas as fontes de sincronização do link.");
+    };
+
+    try {
+      const csvText = await robustFetchCSV(targetUrl);
       const firstLine = csvText.split('\n')[0] || '';
       const detectedDelimiter = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
       Papa.parse(csvText, {
@@ -158,8 +186,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           setIsSyncing(false);
         }
       });
-    } catch (err) {
-      setUploadStatus({ message: 'Erro ao conectar. Verifique se o link CSV é válido.', type: 'error' });
+    } catch (err: any) {
+      console.error("Erro na sincronização:", err);
+      setUploadStatus({ 
+        message: `Erro ao conectar: ${err.message || 'Verifique o link CSV'}`, 
+        type: 'error' 
+      });
       setIsSyncing(false);
     }
   };
