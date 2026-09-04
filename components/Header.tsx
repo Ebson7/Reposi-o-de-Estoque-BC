@@ -1,6 +1,7 @@
 import React from 'react';
 import { Package, Search, ShieldCheck, Sun, Moon, LogOut, KeyRound, Radio, Clock, ShoppingCart, RefreshCw } from 'lucide-react';
 import { CatalogMeta } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   activeTab: 'user' | 'requests' | 'admin';
@@ -93,8 +94,11 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Navigation Controls */}
           <div className="flex items-center space-x-1.5 sm:space-x-2">
             
-            {/* Nav Tabs */}
-            <div className="flex bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+            {/* Botão de Instalar PWA */}
+            <PWAInstallButton variant="header" />
+
+            {/* Nav Tabs (Visíveis a partir de sm: - no mobile ficam na barra inferior) */}
+            <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
               <button
                 onClick={() => setActiveTab('user')}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
@@ -104,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <Search className="w-4 h-4" />
-                <span className="hidden xs:inline">Consulta</span>
+                <span>Consulta</span>
               </button>
 
               <button
@@ -116,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <ShoppingCart className="w-4 h-4" />
-                <span className="hidden xs:inline">Solicitações</span>
+                <span>Solicitações</span>
                 {pendingRequestsCount > 0 && (
                   <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white">
                     {pendingRequestsCount}

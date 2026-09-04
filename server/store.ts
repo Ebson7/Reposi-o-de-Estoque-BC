@@ -432,7 +432,7 @@ class CentralStore {
 
       // Filtro de texto da busca geral (deve conter todas as palavras digitadas)
       if (searchWords.length > 0) {
-        const combined = this.normalize(`${p.codigo} ${p.produto} ${p.sabor} ${p.fornecedor} ${p.comprador}`);
+        const combined = this.normalize(`${p.codigo} ${p.novoCodigo || ''} ${p.produto} ${p.sabor} ${p.fornecedor} ${p.comprador}`);
         const matchesAll = searchWords.every(word => combined.includes(word));
         if (!matchesAll) continue;
       }
@@ -487,7 +487,8 @@ class CentralStore {
 
   // Obter detalhes de um produto
   public getProductByCode(code: string): Product | undefined {
-    return this.products.find(p => p.codigo.trim() === code.trim());
+    const c = code.trim().toLowerCase();
+    return this.products.find(p => p.codigo.trim().toLowerCase() === c || (p.novoCodigo && p.novoCodigo.trim().toLowerCase() === c));
   }
 
   // Processamento de Carga em Lote (CSV / TSV / Excel / Texto bruto)
@@ -520,10 +521,10 @@ class CentralStore {
 
     // Palavras-chave de cabeçalho típicas em planilhas de estoque e distribuidores
     const headerKeywords = [
-      'codigo', 'código', 'cod', 'cód', 'produto', 'descri', 'descricao', 'descrição',
-      'fornecedor', 'forn', 'marca', 'fabricante', 'situacao', 'situação', 'status',
-      'comprador', 'sabor', 'embalagem', 'marsil', 'boraceia', 'boracéia', 'matriz',
-      'filial', 'estoque', 'saldo', 'quantidade', 'qtde', 'qtd', 'item'
+      'fornecedor', 'novo codigo', 'novo_codigo', 'codigo', 'código', 'cod', 'cód', 
+      'situacao', 'situação', 'comprador', 'produto', 'descricao', 'descrição', 
+      'sabor', 'embalagem', 'estoque_marsil', 'estoque marsil', 'marsil', 
+      'estoque_boraceia', 'estoque boraceia', 'boraceia', 'boracéia', 'matriz', 'filial'
     ];
 
     // Encontrar a linha onde realmente começa o cabeçalho (ignora relatórios com títulos no topo)
@@ -580,17 +581,37 @@ class CentralStore {
 
     const newProducts: Product[] = [];
 
-    // Busca flexível de colunas por sinônimos
-    const findVal = (row: any, keys: string[]): string => {
+    // Busca flexível e precisa de colunas por correspondência exata e sinônimos
+    const findVal = (row: any, keys: string[], excludeSubstring?: string): string => {
       const rowKeys = Object.keys(row);
+      const cleanNorm = (str: string) => str.replace(/^["']|["']$/g, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_\s-]+/g, ' ');
+
+      // 1. Passada de correspondência EXATA (normalizada)
       for (const k of rowKeys) {
         if (!k) continue;
-        const cleanK = k.replace(/^["']|["']$/g, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const cleanK = cleanNorm(k);
+        if (excludeSubstring && cleanK.includes(excludeSubstring)) continue;
         for (const candidate of keys) {
-          const cleanCand = candidate.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          if (cleanK === cleanCand || cleanK.includes(cleanCand)) {
+          const cleanCand = cleanNorm(candidate);
+          if (cleanK === cleanCand) {
             const val = row[k];
-            if (val !== undefined && val !== null) {
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
+              return String(val).replace(/^["']|["']$/g, '').trim();
+            }
+          }
+        }
+      }
+
+      // 2. Passada de correspondência PARCIAL (se nenhum exato foi encontrado)
+      for (const k of rowKeys) {
+        if (!k) continue;
+        const cleanK = cleanNorm(k);
+        if (excludeSubstring && cleanK.includes(excludeSubstring)) continue;
+        for (const candidate of keys) {
+          const cleanCand = cleanNorm(candidate);
+          if (cleanK.includes(cleanCand)) {
+            const val = row[k];
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
               return String(val).replace(/^["']|["']$/g, '').trim();
             }
           }
@@ -640,10 +661,15 @@ class CentralStore {
         'denominacao', 'item', 'ds_produto', 'nome produto', 'descricao produto'
       ]);
 
+      // Mapeamento específico dos 10 cabeçalhos da base do cliente
+      let novoCodigo = findVal(row, [
+        'novo codigo', 'novo código', 'novocodigo', 'novo_codigo', 'cod novo', 'cód novo', 'novo cod'
+      ]);
+
       let codigo = findVal(row, [
         'codigo', 'código', 'cod', 'cód', 'cod.', 'cód.', 'item', 'ref', 'referencia', 
         'referência', 'plu', 'sku', 'id', 'cd_produto', 'cod item', 'cod_prod'
-      ]);
+      ], 'novo'); // Exclui colunas que contenham 'novo' para não confundir com NOVO CODIGO
 
       // Fallback posicional se o cabeçalho não bateu exatamente
       const rowVals = Object.values(row).map(v => String(v || '').trim());
@@ -657,10 +683,12 @@ class CentralStore {
 
       if (!produtoNome) continue;
 
-      if (!codigo) {
+      if (!codigo && !novoCodigo) {
         // Tenta pegar primeiro campo numérico como código
         const codeCandidate = rowVals.find(v => v.length >= 1 && /^\d+$/.test(v));
         codigo = codeCandidate || String(i + 1);
+      } else if (!codigo && novoCodigo) {
+        codigo = novoCodigo;
       }
 
       const fornecedor = findVal(row, [
@@ -686,23 +714,24 @@ class CentralStore {
       ]);
 
       const estoqueMarsil = parseQty(findVal(row, [
-        'marsil', 'estoque marsil', 'est marsil', 'est. marsil', 'qtde marsil', 'qtd marsil', 
+        'estoque_marsil', 'estoque marsil', 'marsil', 'est marsil', 'est. marsil', 'qtde marsil', 'qtd marsil', 
         'saldo marsil', 'matriz', 'estoque matriz', 'saldo matriz', 'sp', 'estoque sp', 
         'saldo sp', 'deposito', 'depósito', 'estoque 1', 'loja 1', 'qtde 1', 'saldo 1', 
         'marsil (sp)', 'est_marsil', 'saldo_matriz'
       ]));
 
       const estoqueBoraceia = parseQty(findVal(row, [
-        'boraceia', 'boracéia', 'estoque boraceia', 'estoque boracéia', 'est boraceia', 
+        'estoque_boraceia', 'estoque boraceia', 'boraceia', 'boracéia', 'estoque boracéia', 'est boraceia', 
         'est. boraceia', 'qtde boraceia', 'qtd boraceia', 'saldo boraceia', 'saldo boracéia', 
         'filial', 'estoque filial', 'saldo filial', 'estoque 2', 'loja 2', 'qtde 2', 
         'saldo 2', 'boraceia (filial)', 'est_boraceia', 'saldo_filial'
       ]));
 
       const prod: Product = {
-        id: `p-${codigo || i}-${Date.now()}`,
+        id: `p-${codigo || novoCodigo || i}-${Date.now()}`,
         fornecedor: fornecedor || 'GERAL',
-        codigo: codigo || String(i + 1),
+        codigo: codigo || novoCodigo || String(i + 1),
+        novoCodigo: novoCodigo || undefined,
         situacao: situacao || 'NO',
         comprador: comprador || 'N/A',
         produto: produtoNome.toUpperCase(),
@@ -764,20 +793,19 @@ class CentralStore {
     return { count: this.products.length, meta: this.catalogMeta };
   }
 
-  // Exportar Catálogo Ativo como CSV
+  // Exportar Catálogo Ativo como CSV (utilizando o padrão exato da base de dados)
   public exportCatalogCsv(): string {
     const data = this.products.map(p => ({
-      "Fornecedor": p.fornecedor,
-      "Código": p.codigo,
-      "Situação": p.situacao,
-      "Comprador": p.comprador,
-      "Produto": p.produto,
-      "Sabor": p.sabor,
-      "Embalagem": p.embalagem,
-      "Estoque Marsil": p.estoqueMarsil,
-      "Estoque Boraceia": p.estoqueBoraceia,
-      "Diferença": p.diferencaEstoque,
-      "% Diferença": p.percentualDiferenca ? `${p.percentualDiferenca}%` : '0%'
+      "FORNECEDOR": p.fornecedor,
+      "NOVO CODIGO": p.novoCodigo || p.codigo,
+      "CODIGO": p.codigo,
+      "SITUACAO": p.situacao,
+      "COMPRADOR": p.comprador,
+      "PRODUTO": p.produto,
+      "SABOR": p.sabor,
+      "EMBALAGEM": p.embalagem,
+      "ESTOQUE_MARSIL": p.estoqueMarsil,
+      "ESTOQUE_BORACEIA": p.estoqueBoraceia
     }));
 
     return Papa.unparse(data, { delimiter: ';' });

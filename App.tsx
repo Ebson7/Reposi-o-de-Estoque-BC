@@ -3,6 +3,8 @@ import { Header } from './components/Header';
 import { UserPortal } from './components/UserPortal';
 import { AdminPortal } from './components/AdminPortal';
 import { RequestsHistory } from './components/RequestsHistory';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, CreateOrderPayload } from './types';
 import { api } from './api';
 import { firebaseService } from './firebaseService';
@@ -252,7 +254,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 sm:pb-8">
         
         {/* TAB 1: CONSULTA DE ESTOQUE (VENDEDORES & EQUIPE) */}
         {activeTab === 'user' && (
@@ -301,7 +303,7 @@ export default function App() {
               onBatchUploaded={handleBatchUploaded}
             />
           ) : (
-            <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 text-center max-w-md mx-auto space-y-4 shadow-sm">
+            <div className="bg-white dark:bg-slate-900 p-8 sm:p-12 rounded-2xl border border-slate-200 dark:border-slate-800 text-center max-w-md mx-auto space-y-4 shadow-sm">
               <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Acesso Restrito</h3>
@@ -323,6 +325,22 @@ export default function App() {
         )}
 
       </main>
+
+      {/* Barra de Navegação Inferior para Smartphones */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        authRole={authRole}
+        onOpenLogin={() => {
+          setLoginError('');
+          setPasswordInput('');
+          setShowLoginModal(true);
+        }}
+        pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
+      />
+
+      {/* Indicador de Status Offline / Reconexão */}
+      <OfflineIndicator />
 
       {/* Admin Login Modal */}
       {showLoginModal && (

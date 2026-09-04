@@ -163,63 +163,68 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  // Gerar e baixar modelo de exemplo Excel para o usuário
+  // Gerar e baixar modelo de exemplo Excel para o usuário com os cabeçalhos exatos da base
   const handleDownloadSampleSpreadsheet = () => {
     const sampleData = [
       {
-        "Código": "1001",
-        "Produto": "CHOCOLATE NESTLE CLASSIC AO LEITE 80G",
-        "Fornecedor": "NESTLE",
-        "Situação": "NO",
-        "Comprador": "MARCELO",
-        "Sabor": "AO LEITE",
-        "Embalagem": "FD C/ 18",
-        "Estoque Marsil": 450,
-        "Estoque Boraceia": 60
+        "FORNECEDOR": "NESTLE",
+        "NOVO CODIGO": "1001",
+        "CODIGO": "1001",
+        "SITUACAO": "NO",
+        "COMPRADOR": "MARCELO",
+        "PRODUTO": "CHOCOLATE NESTLE CLASSIC AO LEITE 80G",
+        "SABOR": "AO LEITE",
+        "EMBALAGEM": "FD C/ 18",
+        "ESTOQUE_MARSIL": 450,
+        "ESTOQUE_BORACEIA": 60
       },
       {
-        "Código": "1002",
-        "Produto": "BISCOITO OREO ORIGINAL RECHEADO 90G",
-        "Fornecedor": "MONDELEZ",
-        "Situação": "NO",
-        "Comprador": "CARLOS",
-        "Sabor": "BAUNILHA",
-        "Embalagem": "CX C/ 36",
-        "Estoque Marsil": 1200,
-        "Estoque Boraceia": 180
+        "FORNECEDOR": "MONDELEZ",
+        "NOVO CODIGO": "1002",
+        "CODIGO": "1002",
+        "SITUACAO": "NO",
+        "COMPRADOR": "CARLOS",
+        "PRODUTO": "BISCOITO OREO ORIGINAL RECHEADO 90G",
+        "SABOR": "BAUNILHA",
+        "EMBALAGEM": "CX C/ 36",
+        "ESTOQUE_MARSIL": 1200,
+        "ESTOQUE_BORACEIA": 180
       },
       {
-        "Código": "1003",
-        "Produto": "SALGADINHO DORITOS QUEIJO NACHO 140G",
-        "Fornecedor": "PEPSICO",
-        "Situação": "NO",
-        "Comprador": "MARCELO",
-        "Sabor": "QUEIJO NACHO",
-        "Embalagem": "CX C/ 20",
-        "Estoque Marsil": 800,
-        "Estoque Boraceia": 95
+        "FORNECEDOR": "PEPSICO",
+        "NOVO CODIGO": "1003",
+        "CODIGO": "1003",
+        "SITUACAO": "NO",
+        "COMPRADOR": "MARCELO",
+        "PRODUTO": "SALGADINHO DORITOS QUEIJO NACHO 140G",
+        "SABOR": "QUEIJO NACHO",
+        "EMBALAGEM": "CX C/ 20",
+        "ESTOQUE_MARSIL": 800,
+        "ESTOQUE_BORACEIA": 95
       },
       {
-        "Código": "1004",
-        "Produto": "REFRIGERANTE COCA COLA LATA 350ML",
-        "Fornecedor": "COCA-COLA FEMSA",
-        "Situação": "NO",
-        "Comprador": "ANA PAULA",
-        "Sabor": "ORIGINAL",
-        "Embalagem": "FD C/ 12",
-        "Estoque Marsil": 2400,
-        "Estoque Boraceia": 350
+        "FORNECEDOR": "COCA-COLA FEMSA",
+        "NOVO CODIGO": "1004",
+        "CODIGO": "1004",
+        "SITUACAO": "NO",
+        "COMPRADOR": "ANA PAULA",
+        "PRODUTO": "REFRIGERANTE COCA COLA LATA 350ML",
+        "SABOR": "ORIGINAL",
+        "EMBALAGEM": "FD C/ 12",
+        "ESTOQUE_MARSIL": 2400,
+        "ESTOQUE_BORACEIA": 350
       },
       {
-        "Código": "1005",
-        "Produto": "CAFE PILAO TRADICIONAL VACUO 500G",
-        "Fornecedor": "JDE PEETS",
-        "Situação": "NO",
-        "Comprador": "CARLOS",
-        "Sabor": "TRADICIONAL",
-        "Embalagem": "FD C/ 20",
-        "Estoque Marsil": 620,
-        "Estoque Boraceia": 80
+        "FORNECEDOR": "JDE PEETS",
+        "NOVO CODIGO": "1005",
+        "CODIGO": "1005",
+        "SITUACAO": "NO",
+        "COMPRADOR": "CARLOS",
+        "PRODUTO": "CAFE PILAO TRADICIONAL VACUO 500G",
+        "SABOR": "TRADICIONAL",
+        "EMBALAGEM": "FD C/ 20",
+        "ESTOQUE_MARSIL": 620,
+        "ESTOQUE_BORACEIA": 80
       }
     ];
 
@@ -647,9 +652,33 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
             </div>
 
             {/* Quick Helper on Columns */}
-            <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <span>Colunas reconhecidas automaticamente: <strong>Código</strong>, <strong>Produto</strong>, <strong>Fornecedor</strong>, <strong>Estoque Marsil</strong>, <strong>Estoque Boraceia</strong>, <strong>Situação</strong>, <strong>Comprador</strong>, <strong>Sabor</strong>, <strong>Embalagem</strong>.</span>
-              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">Reconhece títulos e cabeçalhos em qualquer linha</span>
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  Cabeçalhos padrão 100% integrados:
+                </span>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  ✓ Reconhecimento exato das 10 colunas da sua base
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[
+                  'FORNECEDOR',
+                  'NOVO CODIGO',
+                  'CODIGO',
+                  'SITUACAO',
+                  'COMPRADOR',
+                  'PRODUTO',
+                  'SABOR',
+                  'EMBALAGEM',
+                  'ESTOQUE_MARSIL',
+                  'ESTOQUE_BORACEIA'
+                ].map(col => (
+                  <span key={col} className="px-2 py-0.5 rounded-md font-mono text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-blue-700 dark:text-blue-300">
+                    {col}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

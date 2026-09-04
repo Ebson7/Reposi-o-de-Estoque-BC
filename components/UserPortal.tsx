@@ -114,6 +114,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
         const newItem: OrderItem = {
           productId: prod.id,
           productCode: prod.codigo,
+          productNovoCodigo: prod.novoCodigo,
           productName: prod.produto,
           productSabor: prod.sabor,
           fornecedor: prod.fornecedor,
@@ -677,9 +678,16 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                       >
                         {inOrder ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5" />}
                       </button>
-                      <span className="font-mono text-xs font-extrabold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400 rounded-lg">
-                        CÓD: {prod.codigo}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-xs font-extrabold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400 rounded-lg">
+                          CÓD: {prod.codigo}
+                        </span>
+                        {prod.novoCodigo && prod.novoCodigo !== prod.codigo && (
+                          <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-200 dark:border-indigo-800" title="Novo Código do Produto">
+                            NOVO: {prod.novoCodigo}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${situacaoBadge.color} ${situacaoBadge.border}`}>
                       {prod.situacao} - {situacaoBadge.label}
@@ -884,8 +892,15 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                           {inOrder ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
                         </button>
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">
-                        {prod.codigo}
+                      <td className="py-3 px-4">
+                        <span className="font-mono font-bold text-blue-700 dark:text-blue-400">
+                          {prod.codigo}
+                        </span>
+                        {prod.novoCodigo && prod.novoCodigo !== prod.codigo && (
+                          <span className="block font-mono text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                            Novo: {prod.novoCodigo}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-900 dark:text-white">{prod.produto}</div>
@@ -1178,7 +1193,7 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
 
       {/* FLOATING ORDER DOCK (WHEN ITEMS ARE SELECTED) */}
       {orderItems.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+        <div className="fixed bottom-20 sm:bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white p-3 sm:p-4 rounded-2xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center space-x-3 w-full sm:w-auto">
             <div className="relative shrink-0">
               <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30">

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="marsilGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#marsilGrad)"/>
+  <g filter="url(#shadow)">
+    <!-- Roof / Box lid -->
+    <path d="M120 180 L256 120 L392 180 L256 240 Z" fill="#ffffff" fill-opacity="0.95"/>
+    <path d="M120 180 L256 240 L256 360 L120 300 Z" fill="#e0e7ff"/>
+    <path d="M392 180 L256 240 L256 360 L392 300 Z" fill="#cbd5e1"/>
+    <!-- M Emblem on front -->
+    <path d="M165 240 L195 240 L220 280 L245 240 L275 240 L275 320 L250 320 L250 270 L230 305 L210 305 L190 270 L190 320 L165 320 Z" fill="#1e3a8a"/>
+  </g>
+  <text x="256" y="440" font-family="Inter, system-ui, sans-serif" font-size="44" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="4">MARSIL</text>
+</svg>

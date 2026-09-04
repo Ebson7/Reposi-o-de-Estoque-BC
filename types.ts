@@ -3,6 +3,7 @@ export interface Product {
   id: string;
   fornecedor: string;
   codigo: string;
+  novoCodigo?: string;
   situacao: string;
   comprador: string;
   produto: string;
@@ -33,6 +34,7 @@ export interface StockRequest {
   productId: string;
   productName: string;
   productCode: string;
+  productNovoCodigo?: string;
   productSabor: string;
   productSituacao?: string;
   fornecedor?: string;
@@ -53,6 +55,7 @@ export interface StockRequest {
 export interface OrderItem {
   productId: string;
   productCode: string;
+  productNovoCodigo?: string;
   productName: string;
   productSabor: string;
   productSituacao?: string;

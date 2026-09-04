@@ -422,6 +422,11 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
                                 <span className="font-mono text-xs font-black bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">
                                   #{item.productCode}
                                 </span>
+                                {item.productNovoCodigo && item.productNovoCodigo !== item.productCode && (
+                                  <span className="font-mono text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800" title="Novo Código">
+                                    Novo: {item.productNovoCodigo}
+                                  </span>
+                                )}
                                 <span className="text-xs text-slate-500 uppercase font-bold">
                                   {item.fornecedor}
                                 </span>
