@@ -80,6 +80,19 @@ async function startServer() {
       let content = "";
       let sourceName = "Upload de Arquivo";
 
+      if (req.body && Array.isArray(req.body.items) && req.body.items.length > 0) {
+        if (req.body.sourceName) sourceName = req.body.sourceName;
+        console.log(`[API Batch] Processando lista estruturada com ${req.body.items.length} itens...`);
+        const result = store.importParsedProducts(req.body.items, sourceName);
+        res.json({
+          success: true,
+          message: `${result.count} produtos importados e sincronizados com sucesso no servidor!`,
+          count: result.count,
+          meta: result.meta
+        });
+        return;
+      }
+
       if (typeof req.body === "string") {
         content = req.body;
       } else if (req.body && typeof req.body.csvText === "string") {

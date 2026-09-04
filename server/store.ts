@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { Response } from 'express';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { Product, StockRequest, WhatsAppConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, OrderItem, GroupedOrder } from '../types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -489,75 +490,214 @@ class CentralStore {
     return this.products.find(p => p.codigo.trim() === code.trim());
   }
 
-  // Processamento de Carga em Lote (CSV / TSV / Texto bruto)
-  public parseAndImportBatch(csvOrTsvText: string, sourceName: string = "Upload em Lote"): { count: number; meta: CatalogMeta } {
-    if (!csvOrTsvText || csvOrTsvText.trim().length === 0) {
+  // Processamento de Carga em Lote (CSV / TSV / Excel / Texto bruto)
+  public parseAndImportBatch(inputData: string, sourceName: string = "Upload em Lote"): { count: number; meta: CatalogMeta } {
+    if (!inputData || inputData.trim().length === 0) {
       throw new Error("Arquivo ou texto em lote está vazio.");
     }
 
-    // Limpar BOM do Excel
-    let cleanText = csvOrTsvText.replace(/^\uFEFF/, '').trim();
+    let cleanText = inputData;
 
-    // Auto-detectar delimitador (; , \t)
-    const firstLine = cleanText.split('\n')[0] || '';
-    let delimiter = ',';
-    if (firstLine.includes(';') && !firstLine.includes('\t')) {
-      delimiter = ';';
-    } else if (firstLine.includes('\t')) {
-      delimiter = '\t';
+    // Detectar se o conteúdo é um arquivo Excel binário ou em formato zip/xlsx
+    if (cleanText.startsWith('PK\x03\x04') || cleanText.startsWith('data:application/vnd.openxmlformats') || cleanText.includes('\x00')) {
+      try {
+        const wb = XLSX.read(cleanText, { type: 'binary' });
+        const sheetName = wb.SheetNames[0];
+        cleanText = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName], { FS: ';' });
+      } catch (e: any) {
+        console.warn("[Batch Import] Tentativa de ler como Excel binary falhou, processando como texto:", e.message);
+      }
     }
 
-    const parsed = Papa.parse(cleanText, {
+    // Limpar BOM do Excel UTF-8
+    cleanText = cleanText.replace(/^\uFEFF/, '').trim();
+
+    // Quebrar em linhas para detectar cabeçalho real e delimitador
+    const allLines = cleanText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (allLines.length === 0) {
+      throw new Error("Nenhum dado legível foi encontrado no arquivo.");
+    }
+
+    // Palavras-chave de cabeçalho típicas em planilhas de estoque e distribuidores
+    const headerKeywords = [
+      'codigo', 'código', 'cod', 'cód', 'produto', 'descri', 'descricao', 'descrição',
+      'fornecedor', 'forn', 'marca', 'fabricante', 'situacao', 'situação', 'status',
+      'comprador', 'sabor', 'embalagem', 'marsil', 'boraceia', 'boracéia', 'matriz',
+      'filial', 'estoque', 'saldo', 'quantidade', 'qtde', 'qtd', 'item'
+    ];
+
+    // Encontrar a linha onde realmente começa o cabeçalho (ignora relatórios com títulos no topo)
+    let headerLineIndex = 0;
+    let maxHeaderScore = 0;
+    const maxSearchLines = Math.min(15, allLines.length);
+
+    for (let i = 0; i < maxSearchLines; i++) {
+      const lineLower = allLines[i].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      let score = 0;
+      for (const kw of headerKeywords) {
+        if (lineLower.includes(kw)) score++;
+      }
+      if (score > maxHeaderScore) {
+        maxHeaderScore = score;
+        headerLineIndex = i;
+      }
+    }
+
+    // Se encontramos um cabeçalho claro nas primeiras linhas, começamos a partir dele
+    const targetLines = maxHeaderScore >= 2 ? allLines.slice(headerLineIndex) : allLines;
+    const sampleLine = targetLines[0] || '';
+
+    // Auto-detectar delimitador mais provável (; , \t |)
+    let delimiter = ';';
+    const semicolonCount = (sampleLine.match(/;/g) || []).length;
+    const tabCount = (sampleLine.match(/\t/g) || []).length;
+    const commaCount = (sampleLine.match(/,/g) || []).length;
+    const pipeCount = (sampleLine.match(/\|/g) || []).length;
+
+    if (tabCount > semicolonCount && tabCount > commaCount) {
+      delimiter = '\t';
+    } else if (semicolonCount >= commaCount && semicolonCount > 0) {
+      delimiter = ';';
+    } else if (pipeCount > semicolonCount && pipeCount > commaCount) {
+      delimiter = '|';
+    } else if (commaCount > 0) {
+      delimiter = ',';
+    }
+
+    const contentToParse = targetLines.join('\n');
+    const parsed = Papa.parse(contentToParse, {
       header: true,
       skipEmptyLines: 'greedy',
       delimiter: delimiter,
     });
 
     if (!parsed.data || parsed.data.length === 0) {
-      throw new Error("Nenhum dado legível foi encontrado no arquivo.");
+      throw new Error("Não foi possível extrair linhas da tabela.");
     }
+
+    const rows = parsed.data as any[];
+    const detectedHeaders = parsed.meta.fields || (rows[0] ? Object.keys(rows[0]) : []);
 
     const newProducts: Product[] = [];
 
+    // Busca flexível de colunas por sinônimos
     const findVal = (row: any, keys: string[]): string => {
       const rowKeys = Object.keys(row);
       for (const k of rowKeys) {
         if (!k) continue;
-        const cleanK = k.replace(/^["']|["']$/g, '').trim().toLowerCase();
+        const cleanK = k.replace(/^["']|["']$/g, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         for (const candidate of keys) {
-          if (cleanK === candidate.toLowerCase() || cleanK.includes(candidate.toLowerCase())) {
-            return String(row[k] || '').replace(/^["']|["']$/g, '').trim();
+          const cleanCand = candidate.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (cleanK === cleanCand || cleanK.includes(cleanCand)) {
+            const val = row[k];
+            if (val !== undefined && val !== null) {
+              return String(val).replace(/^["']|["']$/g, '').trim();
+            }
           }
         }
       }
       return '';
     };
 
-    const parseQty = (val: string): number => {
-      if (!val) return 0;
-      // Tratar formato brasileiro de número: 1.250 ou 1,250 ou 1250
-      const sanitized = val.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
-      const num = parseInt(sanitized, 10);
-      return isNaN(num) ? 0 : num;
+    // Parser robusto de números para formatos brasileiros e internacionais
+    const parseQty = (val: any): number => {
+      if (val === null || val === undefined) return 0;
+      if (typeof val === 'number') return isNaN(val) ? 0 : Math.round(val);
+      const s = String(val).trim();
+      if (!s || s === '-' || s === '.' || s.toUpperCase() === 'N/A' || s.toUpperCase() === 'NULL') return 0;
+
+      // Tratar formato brasileiro: 1.250 ou 1.250,00 ou 1250,5
+      if (s.includes(',') && s.includes('.')) {
+        const sanitized = s.replace(/\./g, '').replace(',', '.');
+        const num = parseFloat(sanitized);
+        return isNaN(num) ? 0 : Math.round(num);
+      } else if (s.includes(',')) {
+        const sanitized = s.replace(',', '.').replace(/[^\d.-]/g, '');
+        const num = parseFloat(sanitized);
+        return isNaN(num) ? 0 : Math.round(num);
+      } else if (s.includes('.')) {
+        const parts = s.split('.');
+        if (parts.length > 1 && parts[parts.length - 1].length === 3) {
+          const sanitized = s.replace(/\./g, '');
+          const num = parseInt(sanitized, 10);
+          return isNaN(num) ? 0 : num;
+        }
+        const num = parseFloat(s);
+        return isNaN(num) ? 0 : Math.round(num);
+      } else {
+        const sanitized = s.replace(/[^\d-]/g, '');
+        const num = parseInt(sanitized, 10);
+        return isNaN(num) ? 0 : num;
+      }
     };
 
-    const rows = parsed.data as any[];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (!row || typeof row !== 'object') continue;
 
-      const produtoNome = findVal(row, ['Produto', 'Descrição', 'Descricao', 'Nome', 'Desc', 'produto', 'item']);
+      let produtoNome = findVal(row, [
+        'produto', 'descricao', 'descrição', 'desc', 'nome', 'mercadoria', 'material', 
+        'denominacao', 'item', 'ds_produto', 'nome produto', 'descricao produto'
+      ]);
+
+      let codigo = findVal(row, [
+        'codigo', 'código', 'cod', 'cód', 'cod.', 'cód.', 'item', 'ref', 'referencia', 
+        'referência', 'plu', 'sku', 'id', 'cd_produto', 'cod item', 'cod_prod'
+      ]);
+
+      // Fallback posicional se o cabeçalho não bateu exatamente
+      const rowVals = Object.values(row).map(v => String(v || '').trim());
+      if (!produtoNome && rowVals.length >= 2) {
+        // Encontrar valor de texto mais longo (provavelmente a descrição do produto)
+        const textCandidates = rowVals.filter(v => v.length >= 3 && isNaN(Number(v)));
+        if (textCandidates.length > 0) {
+          produtoNome = textCandidates[0];
+        }
+      }
+
       if (!produtoNome) continue;
 
-      const codigo = findVal(row, ['Código', 'Codigo', 'Cód', 'Cod', 'Ref', 'Cod Item', 'Referência', 'Item']);
-      const fornecedor = findVal(row, ['Fornecedor', 'Forn', 'Marca', 'Fabricante']);
-      const situacao = findVal(row, ['Situação', 'Situacao', 'Status', 'Sit', 'Disponibilidade']).toUpperCase();
-      const comprador = findVal(row, ['Comprador', 'Responsável', 'Buyer']);
-      const sabor = findVal(row, ['Sabor', 'Gosto', 'Flavor', 'Variante', 'Detalhe']);
-      const embalagem = findVal(row, ['Embalagem', 'Emb', 'Pack', 'Unidade de Venda']);
-      
-      const estoqueMarsil = parseQty(findVal(row, ['Marsil', 'SP', 'Estoque Marsil', 'Matriz', 'estoque_marsil', 'Qtde Marsil']));
-      const estoqueBoraceia = parseQty(findVal(row, ['Boraceia', 'Boracéia', 'Filial', 'Estoque Boraceia', 'estoque_boraceia', 'Qtde Boraceia']));
+      if (!codigo) {
+        // Tenta pegar primeiro campo numérico como código
+        const codeCandidate = rowVals.find(v => v.length >= 1 && /^\d+$/.test(v));
+        codigo = codeCandidate || String(i + 1);
+      }
+
+      const fornecedor = findVal(row, [
+        'fornecedor', 'fabricante', 'marca', 'forn', 'forn.', 'razao social', 
+        'fantasia', 'fornecedor/marca', 'nm_fornecedor'
+      ]);
+
+      const situacao = findVal(row, [
+        'situacao', 'situação', 'status', 'sit', 'sit.', 'disponibilidade', 
+        'bloqueio', 'st_produto'
+      ]).toUpperCase();
+
+      const comprador = findVal(row, [
+        'comprador', 'responsavel', 'responsável', 'buyer', 'nm_comprador'
+      ]);
+
+      const sabor = findVal(row, [
+        'sabor', 'gosto', 'flavor', 'variante', 'complemento', 'subgrupo', 'detalhe'
+      ]);
+
+      const embalagem = findVal(row, [
+        'embalagem', 'emb', 'emb.', 'unidade', 'un', 'und', 'pack', 'cx', 'fd', 'tipo_emb'
+      ]);
+
+      const estoqueMarsil = parseQty(findVal(row, [
+        'marsil', 'estoque marsil', 'est marsil', 'est. marsil', 'qtde marsil', 'qtd marsil', 
+        'saldo marsil', 'matriz', 'estoque matriz', 'saldo matriz', 'sp', 'estoque sp', 
+        'saldo sp', 'deposito', 'depósito', 'estoque 1', 'loja 1', 'qtde 1', 'saldo 1', 
+        'marsil (sp)', 'est_marsil', 'saldo_matriz'
+      ]));
+
+      const estoqueBoraceia = parseQty(findVal(row, [
+        'boraceia', 'boracéia', 'estoque boraceia', 'estoque boracéia', 'est boraceia', 
+        'est. boraceia', 'qtde boraceia', 'qtd boraceia', 'saldo boraceia', 'saldo boracéia', 
+        'filial', 'estoque filial', 'saldo filial', 'estoque 2', 'loja 2', 'qtde 2', 
+        'saldo 2', 'boraceia (filial)', 'est_boraceia', 'saldo_filial'
+      ]));
 
       const prod: Product = {
         id: `p-${codigo || i}-${Date.now()}`,
@@ -576,7 +716,11 @@ class CentralStore {
     }
 
     if (newProducts.length === 0) {
-      throw new Error("O cabeçalho do arquivo não corresponde aos campos esperados (Código, Produto, Fornecedor, Estoque Marsil, Estoque Boraceia).");
+      const headerList = detectedHeaders.slice(0, 8).join(', ');
+      throw new Error(
+        `Nenhum produto válido foi identificado no arquivo. Colunas detectadas: [${headerList || 'nenhuma'}]. ` +
+        `Certifique-se de que a planilha contenha ao menos o Código e a Descrição/Produto.`
+      );
     }
 
     // Atualizar base de produtos
@@ -594,6 +738,30 @@ class CentralStore {
 
     console.log(`[Batch Import] Sucesso: ${newProducts.length} produtos importados via ${sourceName}.`);
     return { count: newProducts.length, meta: this.catalogMeta };
+  }
+
+  // Importação direta de lista de produtos já estruturada
+  public importParsedProducts(items: Product[], sourceName: string = "Upload Direto"): { count: number; meta: CatalogMeta } {
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("Nenhum item fornecido para importação.");
+    }
+
+    this.products = items.map((p, idx) => this.calculateProductMetrics({
+      ...p,
+      id: p.id || `p-${p.codigo || idx}-${Date.now()}`
+    }));
+
+    this.refreshCatalogMeta(sourceName);
+    this.saveToDisk();
+
+    this.broadcast('catalog_updated', {
+      meta: this.catalogMeta,
+      count: this.products.length,
+      source: sourceName,
+      time: new Date().toISOString()
+    });
+
+    return { count: this.products.length, meta: this.catalogMeta };
   }
 
   // Exportar Catálogo Ativo como CSV

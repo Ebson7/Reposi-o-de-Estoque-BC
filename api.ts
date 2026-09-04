@@ -80,16 +80,20 @@ export const api = {
     return res.json();
   },
 
-  async uploadBatch(csvText: string, sourceName = 'Upload de Arquivo'): Promise<{
+  async uploadBatch(csvTextOrData: string | { csvText?: string; items?: Product[]; sourceName?: string }, sourceName = 'Upload de Arquivo'): Promise<{
     success: boolean;
     message: string;
     count: number;
     meta: CatalogMeta;
   }> {
+    const bodyPayload = typeof csvTextOrData === 'string'
+      ? { csvText: csvTextOrData, sourceName }
+      : { ...csvTextOrData, sourceName: csvTextOrData.sourceName || sourceName };
+
     const res = await fetch('/api/products/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ csvText, sourceName })
+      body: JSON.stringify(bodyPayload)
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Falha no upload' }));

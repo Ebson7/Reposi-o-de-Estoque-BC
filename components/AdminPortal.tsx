@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -94,7 +95,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [expandedAdminOrders, setExpandedAdminOrders] = useState<Record<string, boolean>>({});
 
   // ==========================================
-  // CARGA EM LOTE VIA ARQUIVO (CSV / TSV / TXT)
+  // CARGA EM LOTE VIA ARQUIVO (EXCEL / CSV / TSV / TXT)
   // ==========================================
   const handleFileProcess = async (file: File) => {
     if (!file) return;
@@ -102,27 +103,130 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setUploadStatus({ type: 'idle', message: '' });
 
     try {
-      const text = await file.text();
-      if (!text || text.trim().length === 0) {
-        throw new Error("O arquivo selecionado está vazio.");
+      let csvContent = '';
+      const isExcelFile = file.name.match(/\.(xlsx|xls)$/i) || 
+                          file.type.includes('spreadsheet') || 
+                          file.type.includes('excel');
+
+      const arrayBuffer = await file.arrayBuffer();
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        throw new Error("O arquivo selecionado está vazio (0 bytes).");
       }
 
-      const res = await api.uploadBatch(text, file.name);
+      // Checa assinatura ZIP (arquivos .xlsx modernos)
+      const bytes = new Uint8Array(arrayBuffer.slice(0, 4));
+      const hasZipSignature = bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04;
+
+      if (isExcelFile || hasZipSignature) {
+        // Leitura nativa de arquivo Excel (.xlsx ou .xls)
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error("Nenhuma aba/planilha encontrada no arquivo Excel.");
+        }
+        // Usar a primeira aba da planilha
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        csvContent = XLSX.utils.sheet_to_csv(worksheet, { FS: ';' });
+      } else {
+        // Tenta decodificar como UTF-8
+        let text = new TextDecoder('utf-8').decode(arrayBuffer);
+        // Se houver caractere de substituição (indicando codificação ANSI / Windows-1252 / ISO-8859-1 típica de ERPs brasileiros)
+        if (text.includes('\uFFFD')) {
+          try {
+            text = new TextDecoder('windows-1252').decode(arrayBuffer);
+          } catch (e) {
+            // Mantém decodificação original
+          }
+        }
+        csvContent = text;
+      }
+
+      if (!csvContent || csvContent.trim().length === 0) {
+        throw new Error("Nenhum dado legível foi extraído do arquivo selecionado.");
+      }
+
+      const res = await api.uploadBatch(csvContent, file.name);
       setUploadStatus({
         type: 'success',
-        message: `Sucesso: ${res.count.toLocaleString('pt-BR')} produtos importados e sincronizados em tempo real!`
+        message: `Sucesso: ${res.count.toLocaleString('pt-BR')} produtos importados e sincronizados com sucesso!`
       });
       onBatchUploaded(res.count, res.meta);
     } catch (err: any) {
       console.error("Erro na carga em lote:", err);
       setUploadStatus({
         type: 'error',
-        message: err.message || "Erro ao processar o arquivo. Verifique se o formato é CSV/TSV válido."
+        message: err.message || "Erro ao processar o arquivo. Verifique se o formato é Excel (.xlsx/.xls) ou CSV válido."
       });
     } finally {
       setIsProcessingBatch(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  // Gerar e baixar modelo de exemplo Excel para o usuário
+  const handleDownloadSampleSpreadsheet = () => {
+    const sampleData = [
+      {
+        "Código": "1001",
+        "Produto": "CHOCOLATE NESTLE CLASSIC AO LEITE 80G",
+        "Fornecedor": "NESTLE",
+        "Situação": "NO",
+        "Comprador": "MARCELO",
+        "Sabor": "AO LEITE",
+        "Embalagem": "FD C/ 18",
+        "Estoque Marsil": 450,
+        "Estoque Boraceia": 60
+      },
+      {
+        "Código": "1002",
+        "Produto": "BISCOITO OREO ORIGINAL RECHEADO 90G",
+        "Fornecedor": "MONDELEZ",
+        "Situação": "NO",
+        "Comprador": "CARLOS",
+        "Sabor": "BAUNILHA",
+        "Embalagem": "CX C/ 36",
+        "Estoque Marsil": 1200,
+        "Estoque Boraceia": 180
+      },
+      {
+        "Código": "1003",
+        "Produto": "SALGADINHO DORITOS QUEIJO NACHO 140G",
+        "Fornecedor": "PEPSICO",
+        "Situação": "NO",
+        "Comprador": "MARCELO",
+        "Sabor": "QUEIJO NACHO",
+        "Embalagem": "CX C/ 20",
+        "Estoque Marsil": 800,
+        "Estoque Boraceia": 95
+      },
+      {
+        "Código": "1004",
+        "Produto": "REFRIGERANTE COCA COLA LATA 350ML",
+        "Fornecedor": "COCA-COLA FEMSA",
+        "Situação": "NO",
+        "Comprador": "ANA PAULA",
+        "Sabor": "ORIGINAL",
+        "Embalagem": "FD C/ 12",
+        "Estoque Marsil": 2400,
+        "Estoque Boraceia": 350
+      },
+      {
+        "Código": "1005",
+        "Produto": "CAFE PILAO TRADICIONAL VACUO 500G",
+        "Fornecedor": "JDE PEETS",
+        "Situação": "NO",
+        "Comprador": "CARLOS",
+        "Sabor": "TRADICIONAL",
+        "Embalagem": "FD C/ 20",
+        "Estoque Marsil": 620,
+        "Estoque Boraceia": 80
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Estoque");
+    XLSX.writeFile(wb, "modelo_estoque_marsil.xlsx");
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -411,7 +515,14 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
               ) : (
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               )}
-              <div className="text-sm font-semibold">{uploadStatus.message}</div>
+              <div className="text-sm font-semibold leading-relaxed flex-1">
+                <p>{uploadStatus.message}</p>
+                {uploadStatus.type === 'error' && (
+                  <p className="text-xs font-normal mt-1 opacity-90">
+                    Dica: Você pode baixar o <strong>Modelo Excel</strong> acima para conferir os nomes das colunas ou abrir sua planilha, selecionar as linhas, copiar (Ctrl+C) e usar a opção <strong>"Colar Diretamente do Excel"</strong> logo abaixo.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -452,24 +563,38 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
 
           {/* Direct File Drag & Drop Zone */}
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  1. Upload Direto do Arquivo (Recomendado para 8.000+ Linhas)
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                  <span>1. Upload do Arquivo (Excel ou CSV)</span>
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-full">
+                    Excel + CSV
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Arraste ou selecione o arquivo CSV/TSV gerado pelo seu ERP ou planilha. Processamento ultra-rápido no servidor.
+                  Arraste sua planilha Excel (.xlsx / .xls) ou arquivo CSV/TSV. O sistema lê as colunas automaticamente e sincroniza em tempo real.
                 </p>
               </div>
 
-              <a
-                href="/api/products/export"
-                download
-                className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Exportar Catálogo Atual (CSV)</span>
-              </a>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleSpreadsheet}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors border border-blue-200 dark:border-blue-900"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Baixar Modelo Excel (.xlsx)</span>
+                </button>
+
+                <a
+                  href="/api/products/export"
+                  download
+                  className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Exportar Catálogo Atual</span>
+                </a>
+              </div>
             </div>
 
             <div
@@ -486,7 +611,7 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.tsv,.txt"
+                accept=".csv,.tsv,.txt,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
@@ -498,8 +623,8 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
               {isProcessingBatch ? (
                 <div className="space-y-3">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
-                  <p className="font-bold text-base text-slate-900 dark:text-white">Processando mais de 8.000 linhas...</p>
-                  <p className="text-xs text-slate-500">Calculando diferenças e sincronizando em tempo real com todos os vendedores.</p>
+                  <p className="font-bold text-base text-slate-900 dark:text-white">Processando produtos e sincronizando...</p>
+                  <p className="text-xs text-slate-500">Lendo planilhas, calculando diferenças e atualizando estoques em tempo real.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -508,10 +633,10 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
                   </div>
                   <div>
                     <p className="font-bold text-base text-slate-900 dark:text-white">
-                      Arraste seu arquivo CSV ou clique para selecionar
+                      Arraste seu arquivo Excel (.xlsx / .xls) ou CSV aqui
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Formatos aceitos: <strong>.csv</strong>, <strong>.tsv</strong> ou <strong>.txt</strong> delimitado por vírgula, ponto-e-vírgula ou tabulação.
+                      Suporta <strong>Excel (.xlsx, .xls)</strong> nativo, <strong>.csv</strong>, <strong>.tsv</strong> ou <strong>.txt</strong> delimitado por ponto-e-vírgula, vírgula ou tabulação.
                     </p>
                   </div>
                   <span className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-colors">
@@ -522,8 +647,9 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
             </div>
 
             {/* Quick Helper on Columns */}
-            <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 flex items-center justify-between">
-              <span>Cabeçalhos reconhecidos automaticamente: <strong>Código</strong>, <strong>Produto</strong>, <strong>Fornecedor</strong>, <strong>Estoque Marsil</strong>, <strong>Estoque Boraceia</strong>, <strong>Situação</strong>.</span>
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <span>Colunas reconhecidas automaticamente: <strong>Código</strong>, <strong>Produto</strong>, <strong>Fornecedor</strong>, <strong>Estoque Marsil</strong>, <strong>Estoque Boraceia</strong>, <strong>Situação</strong>, <strong>Comprador</strong>, <strong>Sabor</strong>, <strong>Embalagem</strong>.</span>
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">Reconhece títulos e cabeçalhos em qualquer linha</span>
             </div>
           </div>
 
