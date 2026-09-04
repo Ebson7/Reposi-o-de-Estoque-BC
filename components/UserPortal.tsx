@@ -1,790 +1,1246 @@
-
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Search, ShoppingCart, Calendar, RefreshCw, AlertTriangle, Building2, Store, ListPlus, X, Send, User, Hash, FileText, Filter, Copy, Check, Clock, History, Clipboard, ArrowRight, PlusCircle, CheckCircle2, Candy, Trash2, Edit3, MessageSquareText, Timer, Bot, Sparkles, Wand2, Loader2, Mic, MicOff } from 'lucide-react';
-import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  Search, 
+  Filter, 
+  X, 
+  Package, 
+  AlertTriangle, 
+  Building2, 
+  Send, 
+  Copy, 
+  Check, 
+  Clock, 
+  CheckCircle2, 
+  ArrowRight, 
+  ChevronLeft, 
+  ChevronRight, 
+  Sparkles, 
+  Loader2, 
+  LayoutGrid, 
+  List, 
+  Store, 
+  TrendingUp, 
+  Tag, 
+  MessageSquare, 
+  User, 
+  Calendar,
+  ShoppingBag,
+  Plus,
+  Minus,
+  CheckSquare,
+  Square
+} from 'lucide-react';
+import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType, PaginatedProductsResponse, OrderItem, CreateOrderPayload } from '../types';
+import { api } from '../api';
 import { parseSearchQueryWithGemini } from './geminiService';
+import { OrderDrawerModal } from './OrderDrawerModal';
 
-interface SearchFilters {
-  codigo: string;
-  descricao: string;
-  fornecedor: string;
-  situacao: string;
-}
 interface UserPortalProps {
-  products: Product[];
   requests: StockRequest[];
   vendedores: string[];
   whatsappConfig: WhatsAppConfig;
-  onSubmitRequest: (req: StockRequest) => void;
-  onDeleteRequest: (id: string) => void;
-  onClearUserRequests: (solicitante: string) => void;
-  onUpdateRequest: (req: StockRequest) => void;
+  onSubmitRequest: (req: Omit<StockRequest, 'id' | 'dataSolicitacao' | 'status'>) => Promise<StockRequest>;
+  onSubmitOrder?: (payload: CreateOrderPayload, sendWhatsApp: boolean) => Promise<StockRequest[]>;
+  activeVendor: string;
+  onSelectVendor: (vendor: string) => void;
+  lastUpdated?: string;
+  onViewRequests?: () => void;
 }
 
-const UNIT_OPTIONS: UnitType[] = ['UN', 'CX', 'DP', 'PCT', 'PT', 'SC', 'FD'];
+const UNIT_OPTIONS: UnitType[] = ['CX', 'UN', 'DP', 'PCT', 'PT', 'SC', 'FD'];
 
-const SITUACAO_MAP: Record<string, string> = {
-  'PR': 'Promoção',
-  'NO': 'Normal',
-  'EX': 'Preço Externo',
-  'DV': 'Promoção por Validade',
-  'PC': 'Proibida a Compra',
-  'EI': 'Embalagem Indisponível',
-  'FT': 'Falta Temporária',
-  'LJ': 'Venda somente Loja',
-  'FL': 'Fora de Linha',
-  'PF': 'Produto Funcional'
+const SITUACAO_BADGES: Record<string, { label: string; color: string; border: string }> = {
+  'PR': { label: 'Promoção', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
+  'DV': { label: 'Validade Curta', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+  'FT': { label: 'Falta Temporária', color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
+  'PC': { label: 'Proibida Compra', color: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300', border: 'border-red-200 dark:border-red-800' },
+  'NO': { label: 'Normal', color: 'bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-700' },
+  'EX': { label: 'Preço Externo', color: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+  'FL': { label: 'Fora de Linha', color: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300', border: 'border-gray-200 dark:border-gray-700' }
 };
 
-export const UserPortal: React.FC<UserPortalProps> = ({ 
-  products, 
-  requests, 
-  vendedores, 
-  whatsappConfig, 
+export const UserPortal: React.FC<UserPortalProps> = ({
+  requests,
+  vendedores,
+  whatsappConfig,
   onSubmitRequest,
-  onDeleteRequest,
-  onClearUserRequests,
-  onUpdateRequest
+  onSubmitOrder,
+  activeVendor,
+  onSelectVendor,
+  lastUpdated,
+  onViewRequests
 }) => {
-  const [activeView, setActiveView] = useState<'consulta' | 'historico'>('consulta');
-  const [filterCodigo, setFilterCodigo] = useState('');
-  const [filterDescricao, setFilterDescricao] = useState('');
-  const [filterFornecedor, setFilterFornecedor] = useState('');
-  const [filterSituacao, setFilterSituacao] = useState('');
-  
-  const [assistantQuery, setAssistantQuery] = useState('');
-  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
-  const [showAssistant, setShowAssistant] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  // Search parameters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFornecedor, setSelectedFornecedor] = useState('');
+  const [selectedSituacao, setSelectedSituacao] = useState('');
+  const [selectedEstoque, setSelectedEstoque] = useState<'todos' | 'marsil' | 'boraceia' | 'ambos' | 'zerado'>('todos');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-  // IA Local (CHOCOIA) - Parsing inteligente sem API externa
-  const parseSearchQueryLocal = (query: string): SearchFilters => {
-    const q = query.toLowerCase().trim();
-    const result: SearchFilters = { codigo: '', descricao: '', fornecedor: '', situacao: '' };
-
-    if (!q) return result;
-
-    // 1. Tentar encontrar código (números com 3+ dígitos)
-    const codigoMatch = q.match(/\b\d{3,}\b/);
-    if (codigoMatch) {
-      result.codigo = codigoMatch[0];
+  // Multi-Item Order (Cart) State
+  const [orderItems, setOrderItems] = useState<OrderItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('marsil_order_cart_items');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-
-    // 2. Tentar encontrar situações
-    const situations = {
-      'pr': ['promoção', 'promo', 'liquidar', 'oferta'],
-      'dv': ['validade', 'vencimento', 'curta', 'vencendo'],
-      'ex': ['externo', 'mercado', 'concorrência'],
-      'no': ['normal', 'padrão', 'regular'],
-      'ft': ['falta', 'acabou', 'esgotado', 'indisponível'],
-      'pc': ['proibida', 'bloqueado']
-    };
-
-    for (const [key, terms] of Object.entries(situations)) {
-      if (terms.some(t => q.includes(t))) {
-        result.situacao = key.toUpperCase();
-        break;
-      }
-    }
-
-    // 3. Tentar encontrar fornecedor (marcas conhecidas no catálogo)
-    // Ordenamos por tamanho para pegar nomes mais específicos primeiro
-    const uniqueFornecedores = Array.from(new Set(products.map(p => p.fornecedor.toLowerCase())))
-      .sort((a, b) => b.length - a.length);
-
-    for (const forn of uniqueFornecedores) {
-      if (forn.length > 2 && q.includes(forn)) {
-        result.fornecedor = forn;
-        break;
-      }
-    }
-
-    // 4. Descrição (o que sobrar ou o termo principal)
-    let desc = q;
-    
-    // Removemos os termos de fornecedor e código se encontrados (case-insensitive)
-    if (result.fornecedor) {
-      desc = desc.replace(new RegExp(result.fornecedor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
-    }
-    if (result.codigo) {
-      desc = desc.replace(new RegExp(result.codigo, 'gi'), ' ');
-    }
-    
-    // Removemos termos de situação se encontrados
-    Object.values(situations).flat().forEach(term => {
-      desc = desc.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
-    });
-
-    // Limpeza de stop words comuns em buscas
-    const stopWords = [
-      'me', 'mostre', 'liste', 'procure', 'busque', 'todos', 'os', 'as', 'do', 'da', 'de', 'em', 
-      'com', 'no', 'na', 'um', 'uma', 'sobre', 'ítens', 'itens', 'produtos', 'por', 'favor', 
-      'quero', 'ver', 'quais', 'tem', 'temos', 'estoque', 'disponíveis'
-    ];
-    const words = desc.split(/[\s,.-]+/).filter(w => !stopWords.includes(w) && w.length > 1);
-    
-    result.descricao = words.join(' ').trim();
-
-    return result;
-  };
-
-  const [selected, setSelected] = useState<Product | null>(null);
-  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
-  const [copySuccess, setCopySuccess] = useState<string | null>(null);
-  const [requestStatus, setRequestStatus] = useState<'idle' | 'success'>('idle');
-  
-  // Request Form States
-  const [quant, setQuant] = useState<number>(1);
-  const [unit, setUnit] = useState<UnitType>('CX');
-  const [type, setType] = useState<RequestType>('Aposta na Venda');
-  const [solicitante, setSolicitante] = useState(() => {
-    return '';
   });
+  const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
+
+  // Sync cart to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('marsil_order_cart_items', JSON.stringify(orderItems));
+    } catch {}
+  }, [orderItems]);
+
+  // Order item helpers
+  const isItemInOrder = useCallback((productId: string) => {
+    return orderItems.some(item => item.productId === productId);
+  }, [orderItems]);
+
+  const getOrderItem = useCallback((productId: string) => {
+    return orderItems.find(item => item.productId === productId);
+  }, [orderItems]);
+
+  const handleToggleAddToOrder = useCallback((prod: Product) => {
+    setOrderItems(prev => {
+      const exists = prev.find(item => item.productId === prod.id);
+      if (exists) {
+        return prev.filter(item => item.productId !== prod.id);
+      } else {
+        const newItem: OrderItem = {
+          productId: prod.id,
+          productCode: prod.codigo,
+          productName: prod.produto,
+          productSabor: prod.sabor,
+          fornecedor: prod.fornecedor,
+          quantidade: 1,
+          unidade: (prod.embalagem && UNIT_OPTIONS.includes(prod.embalagem as UnitType)) ? prod.embalagem as UnitType : 'CX',
+          tipo: 'Aposta na Venda',
+          estoqueMarsilMomento: prod.estoqueMarsil,
+          estoqueBoraceiaMomento: prod.estoqueBoraceia,
+          isValidadeCurta: prod.situacao === 'DV'
+        };
+        return [...prev, newItem];
+      }
+    });
+  }, []);
+
+  const handleUpdateItemQty = useCallback((productId: string, delta: number) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        const newQty = Math.max(1, (Number(item.quantidade) || 1) + delta);
+        return { ...item, quantidade: newQty };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleSetItemQty = useCallback((productId: string, qty: number) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, quantidade: Math.max(1, qty) };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleSetItemUnit = useCallback((productId: string, unit: UnitType) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, unidade: unit };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleSetItemTipo = useCallback((productId: string, tipo: RequestType) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, tipo };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleToggleItemValidade = useCallback((productId: string) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, isValidadeCurta: !item.isValidadeCurta };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleSetItemNotes = useCallback((productId: string, notes: string) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, observacoes: notes };
+      }
+      return item;
+    }));
+  }, []);
+
+  const handleRemoveItem = useCallback((productId: string) => {
+    setOrderItems(prev => prev.filter(item => item.productId !== productId));
+  }, []);
+
+  const handleClearOrder = useCallback(() => {
+    setOrderItems([]);
+  }, []);
+
+  const totalVolumesInOrder = useMemo(() => {
+    return orderItems.reduce((acc, item) => acc + (Number(item.quantidade) || 0), 0);
+  }, [orderItems]);
+
+  // Query Results State
+  const [queryResult, setQueryResult] = useState<PaginatedProductsResponse>({
+    items: [],
+    total: 0,
+    page: 1,
+    totalPages: 1,
+    totalMarsilSum: 0,
+    totalBoraceiaSum: 0,
+    fornecedores: [],
+    situacoes: [],
+    lastUpdated: lastUpdated || new Date().toISOString()
+  });
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Smart Search Assistant
+  const [showAiSearch, setShowAiSearch] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // Modal Solicitação
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantidade, setQuantidade] = useState<number>(1);
+  const [unidade, setUnidade] = useState<UnitType>('CX');
+  const [tipo, setTipo] = useState<RequestType>('Aposta na Venda');
+  const [solicitante, setSolicitante] = useState(activeVendor || (vendedores[0] || 'ADALTON LUIZ'));
   const [observacoes, setObservacoes] = useState('');
   const [isValidadeCurta, setIsValidadeCurta] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState(false);
+  const [copiedMsg, setCopiedMsg] = useState(false);
 
-  // Filtro Combinado
-  const filteredProducts = useMemo(() => {
-    const cod = filterCodigo.toLowerCase().trim();
-    const desc = filterDescricao.toLowerCase().trim();
-    const forn = filterFornecedor.toLowerCase().trim();
-    const sit = filterSituacao.toLowerCase().trim();
-    
-    if (!cod && !desc && !forn && !sit) return [];
-    
-    return products.filter(p => {
-      const matchCod = !cod || String(p.codigo).toLowerCase().includes(cod);
-      
-      // Busca flexível por descrição: se houver várias palavras, todas devem estar presentes no nome ou sabor do produto
-      const descKeywords = desc.split(/\s+/).filter(k => k.length > 0);
-      const productNameFull = `${p.produto} ${p.sabor || ''}`.toLowerCase();
-      const matchDesc = descKeywords.length === 0 || descKeywords.every(kw => productNameFull.includes(kw));
-
-      const matchForn = !forn || p.fornecedor.toLowerCase().includes(forn);
-      const matchSit = !sit || (p.situacao && p.situacao.toLowerCase().includes(sit));
-      
-      return matchCod && matchDesc && matchForn && matchSit;
-    }).slice(0, 40);
-  }, [products, filterCodigo, filterDescricao, filterFornecedor, filterSituacao]);
-
-  // Histórico filtrado pelo solicitante atual
-  const myRequests = useMemo(() => {
-    if (!solicitante) return [];
-    return requests.filter(r => r.solicitante === solicitante);
-  }, [requests, solicitante]);
-
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopySuccess(id);
-      setTimeout(() => setCopySuccess(null), 2000);
-    });
-  };
-
-  const handleCopyFormattedList = () => {
-    const dateStr = new Date().toLocaleDateString('pt-BR');
-    // Removido o label "UNIDADE:" após a quantidade no mapeamento do texto
-    // Adicionado a abreviação da situação no final de cada item
-    const itemsStr = myRequests.map(r => 
-      `QTD: ${r.quantidade} ${r.unidade} - Cód: ${r.productCode}${r.productSabor ? ` (${r.productSabor})` : ''}${r.isValidadeCurta ? ' [VALIDADE CURTA]' : ''}${r.observacoes ? ` [Obs: ${r.observacoes}]` : ''}${r.productSituacao ? ` [${r.productSituacao}]` : ''}`
-    ).join('\n');
-    
-    const fullText = `📦 PEDIDO MARSIL
-📅 Data do Pedido: ${dateStr}
-👤 Vendedor: ${solicitante || 'Não Identificado'}
-
-${itemsStr}
-
-Pedido Extra Boracéia`;
-    
-    handleCopy(fullText, 'hist-all');
-  };
-
-  const handleClearCart = () => {
-    if (window.confirm('Deseja realmente excluir TODOS os itens do seu pedido atual?')) {
-      onClearUserRequests(solicitante);
+  // Keep solicitante synced with activeVendor
+  useEffect(() => {
+    if (activeVendor) {
+      setSolicitante(activeVendor);
     }
-  };
+  }, [activeVendor]);
 
-  const handleAssistantSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assistantQuery.trim()) return;
-
-    setIsAssistantLoading(true);
-    
+  // Execute Search Function
+  const runSearch = useCallback(async (pageToLoad = 1) => {
+    setIsSearching(true);
     try {
-      // Tentar usar o Gemini primeiro
-      try {
-        const filters = await parseSearchQueryWithGemini(assistantQuery);
-        setFilterCodigo(filters.codigo || '');
-        setFilterDescricao(filters.descricao || '');
-        setFilterFornecedor(filters.fornecedor || '');
-        setFilterSituacao(filters.situacao || '');
-        
-        setAssistantQuery('');
-        setShowAssistant(false);
-      } catch (geminiError) {
-        console.warn("Gemini falhou, usando IA local como fallback:", geminiError);
-        // Fallback para a lógica local se o Gemini falhar
-        const filters = parseSearchQueryLocal(assistantQuery);
-        setFilterCodigo(filters.codigo || '');
-        setFilterDescricao(filters.descricao || '');
-        setFilterFornecedor(filters.fornecedor || '');
-        setFilterSituacao(filters.situacao || '');
-        
-        setAssistantQuery('');
-        setShowAssistant(false);
-      }
-    } catch (error) {
-      console.error("Erro total na busca inteligente:", error);
+      const res = await api.queryProducts({
+        search: searchTerm,
+        fornecedor: selectedFornecedor,
+        situacao: selectedSituacao,
+        estoque: selectedEstoque,
+        page: pageToLoad,
+        limit: 40
+      });
+      setQueryResult(res);
+      setCurrentPage(res.page);
+    } catch (err) {
+      console.error("Erro ao pesquisar produtos:", err);
     } finally {
-      setIsAssistantLoading(false);
+      setIsSearching(false);
     }
-  };
+  }, [searchTerm, selectedFornecedor, selectedSituacao, selectedEstoque]);
 
-  const toggleVoiceSearch = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      alert('A busca por voz não é suportada neste navegador.');
-      return;
-    }
+  // Debounced search on term/filter changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      runSearch(1);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [runSearch]);
 
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setAssistantQuery(transcript);
-      setIsListening(false);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Erro no reconhecimento de voz:', event.error);
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.start();
-  };
-
-  const handleEditRequest = (req: StockRequest) => {
-    const product = products.find(p => String(p.id) === String(req.productId) || String(p.codigo) === String(req.productCode));
-    if (product) {
-      setSelected(product);
-      setEditingRequestId(req.id);
-      setQuant(req.quantidade);
-      setUnit(req.unidade);
-      setType(req.tipo);
-      setSolicitante(req.solicitante);
-      setObservacoes(req.observacoes || '');
-      setIsValidadeCurta(req.isValidadeCurta || false);
-    }
-  };
-
-  const handleSendRequest = (e: React.FormEvent) => {
+  // Handle Smart AI Search
+  const handleAiSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected || !solicitante) return;
-    setIsSubmitting(true);
+    if (!aiPrompt.trim()) return;
+    setIsAiLoading(true);
 
-    if (editingRequestId) {
-      const originalReq = requests.find(r => String(r.id) === String(editingRequestId));
-      if (originalReq) {
-        const updatedReq: StockRequest = {
-          ...originalReq,
-          quantidade: quant,
-          unidade: unit,
-          tipo: type,
-          solicitante: solicitante,
-          observacoes: observacoes,
-          isValidadeCurta: isValidadeCurta,
-          productSabor: selected.sabor || '',
-          productSituacao: selected.situacao || ''
-        };
-        onUpdateRequest(updatedReq);
+    try {
+      const filters = await parseSearchQueryWithGemini(aiPrompt);
+      if (filters.codigo) {
+        setSearchTerm(filters.codigo);
+      } else if (filters.descricao) {
+        setSearchTerm(filters.descricao);
       }
-    } else {
-      const newReq: StockRequest = {
-        id: `req-${Date.now()}`,
-        productId: selected.id,
-        productName: selected.produto,
-        productCode: String(selected.codigo),
-        productSabor: selected.sabor || '',
-        productSituacao: selected.situacao || '',
-        quantidade: quant,
-        unidade: unit,
-        tipo: type,
-        solicitante: solicitante,
-        observacoes: observacoes,
-        isValidadeCurta: isValidadeCurta,
-        dataSolicitacao: new Date().toISOString(),
-        status: 'Pendente'
-      };
-      onSubmitRequest(newReq);
+      if (filters.fornecedor) {
+        setSelectedFornecedor(filters.fornecedor.toUpperCase());
+      }
+      if (filters.situacao) {
+        setSelectedSituacao(filters.situacao.toUpperCase());
+      }
+      setShowAiSearch(false);
+      setAiPrompt('');
+    } catch (err) {
+      console.warn("Erro ao processar busca com IA:", err);
+    } finally {
+      setIsAiLoading(false);
     }
+  };
 
-    setRequestStatus('success');
+  // Check recent requests for a product in last 7 days
+  const getRecentRequest = useCallback((productCode: string): StockRequest | undefined => {
+    if (!productCode) return undefined;
+    const limitDate = new Date();
+    limitDate.setDate(limitDate.getDate() - 7);
 
-    setTimeout(() => {
+    return requests.find(r => {
+      if (r.productCode !== productCode) return false;
+      return new Date(r.dataSolicitacao) >= limitDate;
+    });
+  }, [requests]);
+
+  // Open modal for request
+  const handleOpenRequestModal = (prod: Product) => {
+    setSelectedProduct(prod);
+    setQuantidade(1);
+    setUnidade('CX');
+    setTipo('Aposta na Venda');
+    setObservacoes('');
+    setIsValidadeCurta(prod.situacao === 'DV');
+    setRequestSuccess(false);
+    setCopiedMsg(false);
+  };
+
+  // Submit Request
+  const handleSubmitRequest = async (e: React.FormEvent, sendWhatsApp = false) => {
+    e.preventDefault();
+    if (!selectedProduct || quantidade <= 0 || !solicitante) return;
+
+    setIsSubmitting(true);
+    try {
+      const saved = await onSubmitRequest({
+        productId: selectedProduct.id,
+        productCode: selectedProduct.codigo,
+        productName: selectedProduct.produto,
+        productSabor: selectedProduct.sabor,
+        productSituacao: selectedProduct.situacao,
+        fornecedor: selectedProduct.fornecedor,
+        quantidade,
+        unidade,
+        tipo,
+        solicitante,
+        observacoes,
+        isValidadeCurta,
+        estoqueMarsilMomento: selectedProduct.estoqueMarsil,
+        estoqueBoraceiaMomento: selectedProduct.estoqueBoraceia
+      });
+
+      setRequestSuccess(true);
+      onSelectVendor(solicitante);
+
+      if (sendWhatsApp) {
+        const msg = encodeURIComponent(`*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
+📦 *Produto:* ${selectedProduct.produto}
+🔢 *Código:* ${selectedProduct.codigo}
+🍓 *Sabor:* ${selectedProduct.sabor || 'Padrão'}
+📊 *Quantidade:* ${quantidade} ${unidade}
+🎯 *Tipo:* ${tipo}
+👤 *Solicitante:* ${solicitante}
+${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? `📝 *Obs:* ${observacoes}\n` : ''}🏢 *Estoque Marsil:* ${selectedProduct.estoqueMarsil} | *Boracéia:* ${selectedProduct.estoqueBoraceia}`);
+
+        const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+      }
+
+      setTimeout(() => {
+        setSelectedProduct(null);
+        setRequestSuccess(false);
+      }, 1500);
+    } catch (err: any) {
+      alert(`Erro ao enviar solicitação: ${err.message || 'Falha de conexão'}`);
+    } finally {
       setIsSubmitting(false);
-      setSelected(null);
-      setEditingRequestId(null);
-      setRequestStatus('idle');
-      setQuant(1);
-      setObservacoes('');
-      setIsValidadeCurta(false);
-    }, 1200);
+    }
   };
 
-  const getStatusColor = (status: string) => {
-    const s = status.toLowerCase();
-    if (s.includes('disponível') || s.includes('ativo') || s.includes('estoque')) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
-    if (s.includes('falta') || s.includes('esgotado') || s.includes('inativo')) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-    if (s.includes('chegando') || s.includes('pedido') || s.includes('trânsito')) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
-    return 'bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-400';
-  };
+  const copyModalMessage = () => {
+    if (!selectedProduct) return;
+    const msg = `*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
+📦 *Produto:* ${selectedProduct.produto}
+🔢 *Código:* ${selectedProduct.codigo}
+🍓 *Sabor:* ${selectedProduct.sabor || 'Padrão'}
+📊 *Quantidade:* ${quantidade} ${unidade}
+🎯 *Tipo:* ${tipo}
+👤 *Solicitante:* ${solicitante}
+${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? `📝 *Obs:* ${observacoes}\n` : ''}🏢 *Estoque Marsil:* ${selectedProduct.estoqueMarsil} | *Boracéia:* ${selectedProduct.estoqueBoraceia}`;
 
-  const hasFilters = filterCodigo || filterDescricao || filterFornecedor || filterSituacao;
+    navigator.clipboard.writeText(msg);
+    setCopiedMsg(true);
+    setTimeout(() => setCopiedMsg(false), 2000);
+  };
 
   return (
-    <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-500">
-      <div className={`p-6 rounded-3xl transition-all duration-500 border ${!solicitante ? 'bg-blue-600 border-blue-500 shadow-2xl shadow-blue-500/20 text-white' : 'bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 shadow-sm'}`}>
-        <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="flex-grow space-y-2">
-            <h3 className={`text-base font-black uppercase tracking-widest flex items-center gap-2 ${!solicitante ? 'text-white' : 'dark:text-white'}`}>
-              <User className={`w-5 h-5 ${!solicitante ? 'text-blue-100' : 'text-blue-500'}`} /> 
-              Vendedor Responsável
-            </h3>
-            <p className={`text-[10px] font-bold uppercase ${!solicitante ? 'text-blue-100' : 'text-gray-400'}`}>
-              {!solicitante ? 'Selecione sua identificação para começar a consulta' : 'Operando como ' + solicitante}
-            </p>
-          </div>
-
-          <div className="relative group w-full sm:w-80">
-            <select 
-              className={`w-full pl-5 pr-10 py-4 rounded-2xl outline-none text-[11px] font-black uppercase tracking-wider shadow-sm transition-all appearance-none cursor-pointer border-2 ${!solicitante ? 'bg-white text-blue-600 border-white' : 'bg-gray-50 dark:bg-slate-800 dark:text-white border-transparent focus:border-blue-500'}`}
-              value={solicitante}
-              onChange={(e) => setSolicitante(e.target.value)}
-            >
-              <option value="" disabled>Selecione um Vendedor...</option>
-              {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-            <div className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${!solicitante ? 'text-blue-600' : 'text-gray-400'}`}>
-              <ArrowRight className="w-3 h-3 rotate-90" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 w-fit mx-auto sm:mx-0">
-        <button 
-          onClick={() => setActiveView('consulta')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'consulta' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
-        >
-          <Search className="w-3.5 h-3.5" /> Consulta de Itens
-        </button>
-        <button 
-          onClick={() => setActiveView('historico')}
-          className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'historico' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500'}`}
-        >
-          <History className="w-3.5 h-3.5" /> Meu Carrinho ({myRequests.length})
-        </button>
-      </div>
-
-      {activeView === 'consulta' ? (
-        <div className={`space-y-6 transition-opacity duration-300 ${!solicitante ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800">
-            <div className="flex justify-between items-end mb-6">
-              <div className="flex items-center gap-4">
-                <div>
-                  <h2 className="text-base font-black flex items-center gap-2 uppercase tracking-widest dark:text-white mb-1">
-                    <Filter className="w-5 h-5 text-blue-600" /> Pesquisa Avançada
-                  </h2>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">Busca por Código, Descrição ou Fabricante</p>
-                </div>
-                <button 
-                  onClick={() => setShowAssistant(!showAssistant)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showAssistant ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400'}`}
-                >
-                  <Bot className="w-4 h-4" />
-                  {showAssistant ? 'Fechar CHOCOIA' : 'Pergunte à CHOCOIA'}
-                </button>
-              </div>
-              {hasFilters && (
-                <button onClick={() => { setFilterCodigo(''); setFilterDescricao(''); setFilterFornecedor(''); setFilterSituacao(''); }} className="text-[10px] font-black text-red-500 uppercase hover:underline flex items-center gap-1 pb-1">
-                  <X className="w-3 h-3" /> Limpar Filtros
-                </button>
-              )}
-            </div>
-
-            {showAssistant && (
-              <form onSubmit={handleAssistantSearch} className="mb-8 p-6 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl shadow-xl shadow-indigo-500/20 animate-in slide-in-from-top-4 duration-300">
-                <div className="flex items-center gap-3 mb-3">
-                  <Bot className="w-6 h-6 text-indigo-100" />
-                  <p className="text-xs font-black text-white uppercase tracking-wider">Olá, eu sou a CHOCOIA! Como posso ajudar na sua busca?</p>
-                </div>
-                <div className="relative group">
-                  <input 
-                    autoFocus
-                    type="text" 
-                    placeholder={isListening ? "Ouvindo... Fale agora." : "Ex: Liste todos os Snickers da Nestlé em promoção..."} 
-                    className={`w-full pl-6 pr-28 py-4 rounded-2xl bg-white/10 border text-white placeholder:text-white/40 text-sm font-bold outline-none focus:ring-2 focus:ring-white/30 transition-all backdrop-blur-sm ${isListening ? 'border-red-400 ring-2 ring-red-400/50' : 'border-white/20'}`}
-                    value={assistantQuery}
-                    onChange={(e) => setAssistantQuery(e.target.value)}
-                    disabled={isAssistantLoading}
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <button 
-                      type="button"
-                      onClick={toggleVoiceSearch}
-                      disabled={isAssistantLoading}
-                      className={`p-2.5 rounded-xl shadow-lg transition-all active:scale-95 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/20 text-white hover:bg-white/30'}`}
-                      title={isListening ? "Parar de ouvir" : "Ativar busca por voz"}
-                    >
-                      {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                    </button>
-                    <button 
-                      type="submit"
-                      disabled={isAssistantLoading || !assistantQuery.trim()}
-                      className="p-2.5 bg-white text-indigo-600 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
-                      title="Enviar pesquisa"
-                    >
-                      {isAssistantLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-                <p className="mt-3 text-[9px] text-indigo-100 font-bold uppercase tracking-wider opacity-70">Eu vou preencher os filtros automaticamente para você.</p>
-              </form>
+    <div className="space-y-6">
+      
+      {/* Search Header & Main Control Bar */}
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        
+        {/* Main Search Input */}
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          <div className="relative flex-1">
+            <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Digite código, nome do produto, sabor ou marca (Ex: 1001, Snickers, Fini)..."
+              className="w-full pl-11 pr-10 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded-full"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="relative group">
-                  <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                  <input type="text" placeholder="Código Item" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterCodigo} onChange={(e) => setFilterCodigo(e.target.value)} />
-                </div>
-                <div className="relative group">
-                  <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                  <input type="text" placeholder="Nome / Descrição" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterDescricao} onChange={(e) => setFilterDescricao(e.target.value)} />
-                </div>
-                <div className="relative group">
-                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                  <input type="text" placeholder="Fornecedor" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterFornecedor} onChange={(e) => setFilterFornecedor(e.target.value)} />
-                </div>
-                <div className="relative group">
-                  <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-blue-500 transition-colors" />
-                  <input type="text" placeholder="Situação" className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-800 outline-none text-xs font-bold dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all" value={filterSituacao} onChange={(e) => setFilterSituacao(e.target.value)} />
-                </div>
-              </div>
-
-            {/* CHOCOIA Floating Button */}
-      <div className="fixed bottom-6 right-6 z-50 group pointer-events-none sm:pointer-events-auto">
-        {!showAssistant && (
-          <div className="absolute bottom-full right-0 mb-4 px-4 py-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-700 animate-bounce text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-indigo-600 dark:text-indigo-400">
-            Pergunte à CHOCOIA! 👋
           </div>
-        )}
-        <button
-          onClick={() => {
-            setActiveView('consulta');
-            setShowAssistant(true);
-            setTimeout(() => {
-              const input = document.querySelector('input[placeholder*="CHOCOIA"]') as HTMLInputElement;
-              input?.focus();
-            }, 100);
-          }}
-          className="pointer-events-auto w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shadow-2xl shadow-indigo-500/40 flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-all group-hover:rotate-12"
-          title="Abrir CHOCOIA"
-        >
-          <Bot className="w-7 h-7" />
-        </button>
-      </div>
 
-      <div className="mt-8 space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
-              {filteredProducts.map(p => (
-                <div key={p.id} className={`group w-full p-5 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${selected?.id === p.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500/20' : 'border-gray-50 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/60'}`}>
-                  <div className="text-left flex-grow">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex items-center bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                        <span className="text-[9px] font-black flex items-center gap-1 mr-2"><Hash className="w-2.5 h-2.5" /> {p.codigo}</span>
-                        <button onClick={(e) => { e.stopPropagation(); handleCopy(p.codigo, `p-cod-${p.id}`); }} className="hover:text-blue-200 transition-colors">
-                          {copySuccess === `p-cod-${p.id}` ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
-                        </button>
-                      </div>
-                      {p.situacao && (
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${getStatusColor(p.situacao)}`}>
-                          {SITUACAO_MAP[p.situacao] || p.situacao}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm font-black uppercase line-clamp-2 dark:text-white leading-tight mb-2 group-hover:text-blue-600 transition-colors">{p.produto}</p>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase flex items-center gap-1">
-                        <Building2 className="w-3 h-3 text-blue-500" /> {p.fornecedor}
-                      </span>
-                      {p.sabor && (
-                        <span className="text-[10px] text-pink-500 dark:text-pink-400 font-bold uppercase flex items-center gap-1">
-                          <Candy className="w-3 h-3" /> {p.sabor}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between sm:justify-end gap-6 border-t sm:border-t-0 pt-4 sm:pt-0 dark:border-slate-800 items-center">
-                    <div className="flex gap-4 mr-2">
-                      <div className="text-right">
-                        <p className="text-base font-black dark:text-white leading-none">{p.estoqueMarsil}</p>
-                        <p className="text-[8px] font-black uppercase text-gray-400 mt-1">Marsil</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-black text-emerald-600 leading-none">{p.estoqueBoraceia}</p>
-                        <p className="text-[8px] font-black uppercase text-gray-400 mt-1">Boracéia</p>
-                      </div>
-                    </div>
-                    <button 
-                      type="button"
-                      disabled={!solicitante}
-                      onClick={() => {
-                        setEditingRequestId(null);
-                        setSelected(p);
-                        setQuant(1);
-                        setUnit('CX');
-                        setType('Aposta na Venda');
-                        setObservacoes('');
-                        setIsValidadeCurta(false);
-                      }} 
-                      className="flex items-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-slate-800 text-white rounded-2xl shadow-xl shadow-blue-500/30 active:scale-95 transition-all text-[11px] font-black uppercase tracking-widest disabled:shadow-none"
-                    >
-                      <ShoppingCart className="w-4 h-4" /> Solicitar
-                    </button>
-                  </div>
-                </div>
-              ))}
-              
-              {filteredProducts.length === 0 && (
-                <div className="text-center py-32 opacity-20 flex flex-col items-center">
-                  <Search className="w-16 h-16 mb-4" />
-                  <p className="text-xs font-black uppercase tracking-widest px-6">
-                    {hasFilters 
-                      ? "Nenhum produto encontrado com esses filtros." 
-                      : products.length === 0 
-                        ? "Nenhum produto carregado no sistema. Importe dados no painel Admin ou via link de sincronização."
-                        : "Utilize os filtros acima ou fale com a CHOCOIA para pesquisar o catálogo"}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          <button
+            onClick={() => setShowAiSearch(!showAiSearch)}
+            className={`inline-flex items-center justify-center space-x-2 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              showAiSearch
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-900 hover:bg-blue-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Busca Inteligente</span>
+          </button>
         </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden animate-in slide-in-from-right-4">
-          <div className="p-6 border-b border-gray-50 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center bg-gray-50/20 dark:bg-slate-800/20 gap-4">
-            <div>
-              <h3 className="text-sm font-black dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <History className="w-4 h-4 text-blue-500" /> Histórico / Carrinho de Pedidos
-              </h3>
-              <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Vendedor Ativo: {solicitante || '---'}</p>
+
+        {/* AI Natural Language Search Prompt */}
+        {showAiSearch && (
+          <form onSubmit={handleAiSearch} className="bg-blue-50/70 dark:bg-blue-950/30 p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 space-y-3 animate-fade-in">
+            <div className="flex items-center space-x-2 text-xs font-bold text-blue-800 dark:text-blue-300">
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span>Digite em linguagem natural o que procura:</span>
             </div>
             <div className="flex gap-2">
-              <button 
-                onClick={handleClearCart}
-                disabled={myRequests.length === 0}
-                className="text-[9px] font-black bg-red-50 dark:bg-red-900/30 text-red-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm disabled:opacity-30"
+              <input
+                type="text"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Ex: 'Quero ver biscoitos Bauducco em promoção' ou 'Chocolates com estoque em Marsil'..."
+                className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-800 rounded-lg text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={isAiLoading || !aiPrompt.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-sm font-bold flex items-center space-x-1.5 transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Limpar
-              </button>
-              <button 
-                onClick={handleCopyFormattedList}
-                disabled={myRequests.length === 0}
-                className="text-[9px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-4 py-2.5 rounded-xl uppercase flex items-center gap-2 hover:brightness-95 transition-all shadow-sm disabled:opacity-30"
-              >
-                {copySuccess === 'hist-all' ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
-                Copiar Lista
+                {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Buscar</span>}
               </button>
             </div>
+          </form>
+        )}
+
+        {/* Quick Filter Chips */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center space-x-1.5 overflow-x-auto py-1 max-w-full custom-scrollbar">
+            <button
+              onClick={() => setSelectedEstoque('todos')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                selectedEstoque === 'todos'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+              }`}
+            >
+              Todos ({queryResult.total})
+            </button>
+
+            <button
+              onClick={() => setSelectedEstoque('marsil')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                selectedEstoque === 'marsil'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100'
+              }`}
+            >
+              Com Estoque Marsil
+            </button>
+
+            <button
+              onClick={() => setSelectedEstoque('boraceia')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                selectedEstoque === 'boraceia'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
+              }`}
+            >
+              Com Estoque Boracéia
+            </button>
+
+            <button
+              onClick={() => setSelectedEstoque('ambos')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                selectedEstoque === 'ambos'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+              }`}
+            >
+              Disponível em Ambos
+            </button>
+
+            <button
+              onClick={() => setSelectedEstoque('zerado')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                selectedEstoque === 'zerado'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+              }`}
+            >
+              Zerados
+            </button>
           </div>
-          <div className="overflow-x-auto">
-            {myRequests.length === 0 ? (
-              <div className="py-24 text-center opacity-30 flex flex-col items-center">
-                <Clock className="w-12 h-12 mb-4" />
-                <p className="text-[10px] font-black uppercase tracking-widest">Seu carrinho de solicitações está vazio.</p>
+
+          {/* View mode toggle & Cart button */}
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode('cards')}
+                title="Visualização em Cards"
+                className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                title="Visualização em Tabela Compacta"
+                className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Pedido Atual Quick Button */}
+            <button
+              onClick={() => setIsOrderDrawerOpen(true)}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                orderItems.length > 0
+                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+              title="Abrir detalhes do pedido consolidado"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Pedido ({orderItems.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Dropdown Filters (Fornecedor & Situação) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filtrar por Marca / Fornecedor</label>
+            <select
+              value={selectedFornecedor}
+              onChange={(e) => setSelectedFornecedor(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos os Fornecedores ({queryResult.fornecedores.length})</option>
+              {queryResult.fornecedores.map(f => (
+                <option key={f.name} value={f.name}>
+                  {f.name} ({f.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filtrar por Situação</label>
+            <select
+              value={selectedSituacao}
+              onChange={(e) => setSelectedSituacao(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas as Situações</option>
+              {queryResult.situacoes.map(s => (
+                <option key={s.code} value={s.code}>
+                  {s.code} - {s.label} ({s.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Active Filters Clear Bar */}
+        {(searchTerm || selectedFornecedor || selectedSituacao || selectedEstoque !== 'todos') && (
+          <div className="flex items-center justify-between text-xs bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400">
+            <span>Filtros ativos aplicados</span>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedFornecedor('');
+                setSelectedSituacao('');
+                setSelectedEstoque('todos');
+              }}
+              className="text-rose-600 dark:text-rose-400 hover:underline font-bold"
+            >
+              Limpar Todos os Filtros
+            </button>
+          </div>
+        )}
+
+      </div>
+
+      {/* Results Summary Bar */}
+      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+        <div className="flex items-center space-x-3">
+          <span className="font-bold text-slate-800 dark:text-slate-200">
+            {isSearching ? 'Consultando banco de dados...' : `${queryResult.total.toLocaleString('pt-BR')} produtos encontrados`}
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <span className="hidden sm:inline text-blue-600 dark:text-blue-400 font-semibold">
+            Estoque Marsil: {queryResult.totalMarsilSum.toLocaleString('pt-BR')}
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <span className="hidden sm:inline text-emerald-600 dark:text-emerald-400 font-semibold">
+            Estoque Boracéia: {queryResult.totalBoraceiaSum.toLocaleString('pt-BR')}
+          </span>
+        </div>
+
+        <span className="font-medium">
+          Página {queryResult.page} de {queryResult.totalPages}
+        </span>
+      </div>
+
+      {/* Results Grid / Table */}
+      {isSearching ? (
+        <div className="p-16 text-center space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Consultando estoque em tempo real...</p>
+        </div>
+      ) : queryResult.items.length === 0 ? (
+        <div className="p-16 text-center space-y-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+          <Package className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+          <p className="text-base font-bold text-slate-700 dark:text-slate-300">Nenhum produto encontrado</p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Não encontramos itens com os critérios informados. Experimente buscar por outro código, reduzir os filtros ou limpar a busca.
+          </p>
+        </div>
+      ) : viewMode === 'cards' ? (
+        
+        /* Cards View */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {queryResult.items.map(prod => {
+            const recent = getRecentRequest(prod.codigo);
+            const situacaoBadge = SITUACAO_BADGES[prod.situacao] || {
+              label: prod.situacao,
+              color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+              border: 'border-slate-200 dark:border-slate-700'
+            };
+
+            const marsilZero = prod.estoqueMarsil <= 0;
+            const boraceiaZero = prod.estoqueBoraceia <= 0;
+
+            const inOrder = isItemInOrder(prod.id);
+            const cartItem = getOrderItem(prod.id);
+
+            return (
+              <div
+                key={prod.id}
+                className={`bg-white dark:bg-slate-900 rounded-2xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md ${
+                  inOrder
+                    ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50/15 dark:bg-blue-950/20'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700/80'
+                }`}
+              >
+                <div className="space-y-3">
+                  
+                  {/* Header: Code, Checkbox & Situacao */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAddToOrder(prod)}
+                        className={`p-1 rounded-lg transition-colors ${
+                          inOrder 
+                            ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/80' 
+                            : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                        title={inOrder ? 'Remover do pedido' : 'Adicionar ao pedido'}
+                      >
+                        {inOrder ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5" />}
+                      </button>
+                      <span className="font-mono text-xs font-extrabold px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400 rounded-lg">
+                        CÓD: {prod.codigo}
+                      </span>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${situacaoBadge.color} ${situacaoBadge.border}`}>
+                      {prod.situacao} - {situacaoBadge.label}
+                    </span>
+                  </div>
+
+                  {/* Product Title */}
+                  <div>
+                    <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white leading-snug line-clamp-2">
+                      {prod.produto}
+                    </h3>
+                    <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{prod.fornecedor}</span>
+                      {prod.sabor && (
+                        <>
+                          <span>•</span>
+                          <span>{prod.sabor}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 7-Day Recent Request Warning Banner */}
+                  {recent && (
+                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 p-2.5 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-start space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Já solicitado nos últimos 7 dias:</strong>
+                        <p className="mt-0.5">
+                          Por <strong>{recent.solicitante}</strong> ({recent.quantidade} {recent.unidade} - {recent.tipo})
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stock Comparison Grid */}
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="block text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                        Estoque Marsil
+                      </span>
+                      <span className={`text-lg sm:text-xl font-black ${marsilZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                        {prod.estoqueMarsil.toLocaleString('pt-BR')}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        Estoque Boracéia
+                      </span>
+                      <span className={`text-lg sm:text-xl font-black ${boraceiaZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                        {prod.estoqueBoraceia.toLocaleString('pt-BR')}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
+                    </div>
+                  </div>
+
+                  {/* Stock Difference Indicator */}
+                  <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+                    <span>Balanço:</span>
+                    {prod.estoqueMarsil > 0 && prod.estoqueBoraceia <= 0 ? (
+                      <span className="font-bold text-blue-600 dark:text-blue-400">
+                        Disponível em Marsil ({prod.estoqueMarsil} CX)
+                      </span>
+                    ) : prod.estoqueMarsil > prod.estoqueBoraceia ? (
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        +{prod.percentualDiferenca}% em Marsil
+                      </span>
+                    ) : prod.estoqueMarsil === 0 && prod.estoqueBoraceia === 0 ? (
+                      <span className="font-bold text-rose-500">Esgotado em ambos</span>
+                    ) : (
+                      <span className="font-semibold text-slate-600 dark:text-slate-400">Equilibrado</span>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Action Area: In-Order Controls or Quick Add */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  {inOrder ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/50 p-2 rounded-xl border border-blue-200 dark:border-blue-900/60">
+                        <span className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center space-x-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>No Pedido ({cartItem?.unidade || 'CX'})</span>
+                        </span>
+
+                        {/* Stepper */}
+                        <div className="flex items-center border border-blue-200 dark:border-blue-800 rounded-lg bg-white dark:bg-slate-900 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateItemQty(prod.id, -1)}
+                            className="p-1 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-700 dark:text-blue-300"
+                            title="Diminuir"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            value={cartItem?.quantidade || 1}
+                            onChange={(e) => handleSetItemQty(prod.id, Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-10 text-center text-xs font-black bg-transparent border-none focus:outline-none text-slate-900 dark:text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateItemQty(prod.id, 1)}
+                            className="p-1 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-700 dark:text-blue-300"
+                            title="Aumentar"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsOrderDrawerOpen(true)}
+                          className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 shadow-sm transition-colors"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Ver Pedido ({orderItems.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(prod.id)}
+                          className="py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors"
+                          title="Remover deste pedido"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAddToOrder(prod)}
+                        className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm flex items-center justify-center space-x-1.5 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Adicionar ao Pedido</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenRequestModal(prod)}
+                        className="py-2.5 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors flex items-center justify-center space-x-1"
+                        title="Fazer pedido individual avulso"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Individual</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
               </div>
-            ) : (
-              <table className="w-full text-left border-collapse min-w-[500px]">
-                <thead className="bg-gray-50/50 dark:bg-slate-800/50">
-                  <tr>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Item</th>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase">Solicitação</th>
-                    <th className="px-6 py-4 text-[9px] font-black text-gray-400 uppercase text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                  {myRequests.map(req => (
-                    <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black bg-blue-50 dark:bg-blue-900/30 text-blue-600 px-1.5 w-fit rounded uppercase">{req.productCode}</span>
-                            {req.isValidadeCurta && (
-                              <span className="text-[8px] font-black bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded flex items-center gap-1 uppercase">
-                                <Timer className="w-2.5 h-2.5" /> Val. Curta
-                              </span>
-                            )}
+            );
+          })}
+        </div>
+      ) : (
+
+        /* Compact Table View */
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-3 px-3 w-10 text-center">Sel.</th>
+                  <th className="py-3 px-4">Código</th>
+                  <th className="py-3 px-4">Produto / Sabor</th>
+                  <th className="py-3 px-4">Fornecedor</th>
+                  <th className="py-3 px-4">Situação</th>
+                  <th className="py-3 px-4 text-center">Marsil</th>
+                  <th className="py-3 px-4 text-center">Boracéia</th>
+                  <th className="py-3 px-4 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {queryResult.items.map(prod => {
+                  const recent = getRecentRequest(prod.codigo);
+                  const inOrder = isItemInOrder(prod.id);
+                  const cartItem = getOrderItem(prod.id);
+
+                  return (
+                    <tr 
+                      key={prod.id} 
+                      className={`transition-colors ${
+                        inOrder 
+                          ? 'bg-blue-50/40 dark:bg-blue-950/20' 
+                          : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAddToOrder(prod)}
+                          className="p-1 text-slate-400 hover:text-blue-600"
+                        >
+                          {inOrder ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-blue-700 dark:text-blue-400">
+                        {prod.codigo}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 dark:text-white">{prod.produto}</div>
+                        {prod.sabor && <div className="text-xs text-slate-400">{prod.sabor}</div>}
+                        {recent && (
+                          <span className="inline-block mt-1 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded">
+                            ⚠️ Solicitado há 7d por {recent.solicitante}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
+                        {prod.fornecedor}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          {prod.situacao}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center font-extrabold text-blue-700 dark:text-blue-400">
+                        {prod.estoqueMarsil}
+                      </td>
+                      <td className="py-3 px-4 text-center font-extrabold text-emerald-700 dark:text-emerald-400">
+                        {prod.estoqueBoraceia}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {inOrder ? (
+                          <div className="inline-flex items-center space-x-1">
+                            <span className="px-2 py-1 bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-xs rounded-lg">
+                              {cartItem?.quantidade} {cartItem?.unidade}
+                            </span>
+                            <button
+                              onClick={() => handleRemoveItem(prod.id)}
+                              className="px-2 py-1 text-slate-400 hover:text-rose-600 text-xs font-bold"
+                              title="Remover do pedido"
+                            >
+                              ✕
+                            </button>
                           </div>
-                          <p className="text-[11px] font-bold dark:text-slate-200 line-clamp-1">{req.productName}</p>
-                          {req.productSabor && (
-                             <p className="text-[9px] font-black text-pink-500 uppercase">{req.productSabor}</p>
-                          )}
-                          {req.observacoes && (
-                            <p className="text-[9px] text-blue-500 font-medium italic mt-0.5 max-w-xs truncate">"{req.observacoes}"</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[11px] font-black text-gray-700 dark:text-slate-300 uppercase">{req.quantidade} {req.unidade}</span>
-                          <span className="text-[8px] font-bold text-gray-400 uppercase">{req.tipo}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-center gap-3">
-                          <button 
-                            type="button"
-                            onClick={() => handleEditRequest(req)}
-                            className="flex flex-col items-center gap-1 group/btn"
-                            title="Editar"
-                          >
-                            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 group-hover/btn:bg-blue-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
-                              <Edit3 className="w-4 h-4" />
-                            </div>
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm('Deseja realmente excluir este item do pedido?')) {
-                                onDeleteRequest(req.id);
-                              }
-                            }}
-                            className="flex flex-col items-center gap-1 group/btn"
-                            title="Excluir"
-                          >
-                            <div className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 group-hover/btn:bg-red-600 group-hover/btn:text-white rounded-xl transition-all shadow-sm">
-                              <Trash2 className="w-4 h-4" />
-                            </div>
-                          </button>
-                        </div>
+                        ) : (
+                          <div className="inline-flex items-center space-x-1.5">
+                            <button
+                              onClick={() => handleToggleAddToOrder(prod)}
+                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center space-x-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Pedido</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenRequestModal(prod)}
+                              className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
+                              title="Pedir avulso"
+                            >
+                              Avulso
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {selected && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
-            <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-800/30">
-              <div>
-                <h3 className="text-lg font-black dark:text-white uppercase leading-tight">
-                  {editingRequestId ? 'Editar Item' : 'Configurar Item'}
-                </h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[10px] font-bold text-blue-500 uppercase line-clamp-1">{selected.produto}</p>
-                </div>
-                {selected.sabor && (
-                  <p className="text-[9px] font-black text-pink-500 uppercase flex items-center gap-1 mt-1">
-                    <Candy className="w-2.5 h-2.5" /> Sabor: {selected.sabor}
-                  </p>
-                )}
-              </div>
-              <button onClick={() => { setSelected(null); setEditingRequestId(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
+      {/* Pagination Bar */}
+      {queryResult.totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <button
+            onClick={() => runSearch(currentPage - 1)}
+            disabled={currentPage <= 1 || isSearching}
+            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Anterior</span>
+          </button>
+
+          <span className="text-xs text-slate-500 font-medium">
+            Página {currentPage} de {queryResult.totalPages}
+          </span>
+
+          <button
+            onClick={() => runSearch(currentPage + 1)}
+            disabled={currentPage >= queryResult.totalPages || isSearching}
+            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center space-x-1.5 transition-colors"
+          >
+            <span>Próxima</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Modal: Solicitar Transferência de Estoque */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
             
-            <form onSubmit={handleSendRequest} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-400 px-1">Quantidade</label>
-                  <input type="number" min="1" required className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 rounded-xl font-bold dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner" value={quant} onChange={e => setQuant(parseInt(e.target.value))} />
+            {/* Modal Header */}
+            <div className="bg-slate-50 dark:bg-slate-800/80 px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
+                  CÓD: {selectedProduct.codigo}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  {selectedProduct.produto}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedProduct(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={(e) => handleSubmitRequest(e, false)} className="p-6 space-y-4">
+              
+              {/* Current Stocks Display */}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-center text-xs">
+                <div>
+                  <span className="text-slate-400 font-medium">Estoque Marsil:</span>
+                  <span className="font-black text-sm block text-blue-600 dark:text-blue-400">
+                    {selectedProduct.estoqueMarsil} {selectedProduct.embalagem}
+                  </span>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-400 px-1">Unidade</label>
-                  <select className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 rounded-xl font-bold dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner" value={unit} onChange={e => setUnit(e.target.value as UnitType)}>
-                    {UNIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                <div>
+                  <span className="text-slate-400 font-medium">Estoque Boracéia:</span>
+                  <span className="font-black text-sm block text-emerald-600 dark:text-emerald-400">
+                    {selectedProduct.estoqueBoraceia} {selectedProduct.embalagem}
+                  </span>
+                </div>
+              </div>
+
+              {/* Solicitante (Vendedor) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Quem está solicitando? (Vendedor)
+                </label>
+                <select
+                  value={solicitante}
+                  onChange={(e) => setSolicitante(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  {vendedores.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantidade & Unidade */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Quantidade Desejada
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={quantidade}
+                    onChange={(e) => setQuantidade(Math.max(1, parseInt(e.target.value) || 1))}
+                    required
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Unidade
+                  </label>
+                  <select
+                    value={unidade}
+                    onChange={(e) => setUnidade(e.target.value as UnitType)}
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    {UNIT_OPTIONS.map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Natureza do Pedido</label>
+              {/* Tipo de Demanda */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Finalidade da Solicitação
+                </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setType('Aposta na Venda')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Aposta na Venda' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Aposta na Venda</button>
-                  <button type="button" onClick={() => setType('Venda Garantida')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${type === 'Venda Garantida' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400 hover:bg-gray-100'}`}>Venda Garantida</button>
+                  <button
+                    type="button"
+                    onClick={() => setTipo('Aposta na Venda')}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      tipo === 'Aposta na Venda'
+                        ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Aposta na Venda (Teste Giro)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTipo('Venda Garantida')}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      tipo === 'Venda Garantida'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Venda Garantida (Pedido Fechado)
+                  </button>
                 </div>
               </div>
 
-              <div className="space-y-1.5 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsValidadeCurta(!isValidadeCurta)} 
-                  className={`w-full flex items-center justify-between px-5 py-4 rounded-xl border-2 transition-all ${isValidadeCurta ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-gray-50 dark:bg-slate-800 border-transparent text-gray-400'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Timer className={`w-5 h-5 ${isValidadeCurta ? 'text-orange-500' : 'text-gray-400'}`} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Validade Curta?</span>
-                  </div>
-                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${isValidadeCurta ? 'bg-orange-500 border-orange-500' : 'border-gray-200 dark:border-slate-700'}`}>
-                    {isValidadeCurta && <Check className="w-3 h-3 text-white stroke-[4]" />}
-                  </div>
-                </button>
-              </div>
+              {/* Validade Curta Checkbox */}
+              <label className="flex items-center space-x-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isValidadeCurta}
+                  onChange={(e) => setIsValidadeCurta(e.target.checked)}
+                  className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500"
+                />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Marcar como Validade Curta (Atenção logística)
+                </span>
+              </label>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 px-1 flex items-center gap-1">
-                  <MessageSquareText className="w-3 h-3 text-blue-500" /> Observações (Opcional)
+              {/* Observações */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Observações adicionais (opcional)
                 </label>
-                <textarea 
-                  placeholder="Ex: Urgente para amanhã..." 
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-800 rounded-xl font-medium text-xs dark:text-white outline-none border-2 border-transparent focus:border-blue-500 transition-all shadow-inner h-20 resize-none"
+                <textarea
                   value={observacoes}
-                  onChange={e => setObservacoes(e.target.value)}
+                  onChange={(e) => setObservacoes(e.target.value)}
+                  placeholder="Ex: Cliente aguardando entrega na segunda-feira..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <button 
-                disabled={isSubmitting || !solicitante} 
-                type="submit" 
-                className={`w-full font-black py-6 rounded-2xl flex items-center justify-center gap-4 uppercase text-sm tracking-[0.15em] shadow-2xl active:scale-95 transition-all mt-6 ${requestStatus === 'success' ? 'bg-emerald-500 text-white ring-4 ring-emerald-500/20' : 'bg-blue-600 hover:bg-blue-700 text-white ring-4 ring-blue-600/10'}`}
-              >
-                {isSubmitting ? (
-                  <RefreshCw className="w-6 h-6 animate-spin" />
-                ) : requestStatus === 'success' ? (
-                  <><CheckCircle2 className="w-6 h-6" /> {editingRequestId ? 'ATUALIZADO!' : 'ADICIONADO!'}</>
-                ) : (
-                  <><PlusCircle className="w-6 h-6" /> {editingRequestId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR AO PEDIDO'}</>
-                )}
-              </button>
+              {requestSuccess ? (
+                <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 p-4 rounded-xl text-center space-y-1 text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600" />
+                  <p className="font-bold text-sm">Solicitação registrada com sucesso!</p>
+                  <p className="text-xs">Sincronizada em tempo real com a administração.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 transition-colors"
+                    >
+                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <span>Registrar no Sistema</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleSubmitRequest(e, true)}
+                      disabled={isSubmitting}
+                      className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-1.5 transition-colors"
+                      title="Registrar e abrir WhatsApp"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span className="hidden sm:inline">Enviar WhatsApp</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={copyModalMessage}
+                    className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    {copiedMsg ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedMsg ? 'Mensagem Copiada!' : 'Copiar texto para WhatsApp'}</span>
+                  </button>
+                </div>
+              )}
+
             </form>
+
           </div>
         </div>
       )}
+
+      {/* FLOATING ORDER DOCK (WHEN ITEMS ARE SELECTED) */}
+      {orderItems.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-[94%] bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center space-x-3 w-full sm:w-auto">
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-emerald-500 text-white font-black text-[10px] rounded-full flex items-center justify-center border-2 border-slate-900">
+                {orderItems.length}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-black text-white">
+                Pedido com {orderItems.length} {orderItems.length === 1 ? 'produto' : 'produtos'}
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Total de <strong className="text-emerald-400 font-bold">{totalVolumesInOrder}</strong> volumes selecionados
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={handleClearOrder}
+              className="py-2 px-3 text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Limpar
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOrderDrawerOpen(true)}
+              className="flex-1 sm:flex-initial py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 transition-colors"
+            >
+              <span>Revisar e Finalizar Pedido</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MULTI-ITEM ORDER MODAL */}
+      <OrderDrawerModal
+        isOpen={isOrderDrawerOpen}
+        onClose={() => setIsOrderDrawerOpen(false)}
+        orderItems={orderItems}
+        onUpdateItemQty={handleUpdateItemQty}
+        onSetItemQty={handleSetItemQty}
+        onSetItemUnit={handleSetItemUnit}
+        onSetItemTipo={handleSetItemTipo}
+        onToggleItemValidade={handleToggleItemValidade}
+        onSetItemNotes={handleSetItemNotes}
+        onRemoveItem={handleRemoveItem}
+        onClearOrder={handleClearOrder}
+        vendedores={vendedores}
+        activeVendor={activeVendor}
+        onSelectVendor={onSelectVendor}
+        whatsappConfig={whatsappConfig}
+        onSubmitOrder={onSubmitOrder || (async (payload, sendWa) => {
+          return api.createOrder(payload);
+        })}
+        onViewRequests={onViewRequests}
+      />
+
     </div>
   );
 };

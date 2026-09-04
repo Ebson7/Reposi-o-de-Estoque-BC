@@ -13,6 +13,7 @@
   "dependencies": {
     "@google/genai": "latest",
     "express": "^5.2.1",
+    "firebase": "^12.18.0",
     "lucide-react": "^0.474.0",
     "papaparse": "^5.5.2",
     "react": "^19.0.0",
