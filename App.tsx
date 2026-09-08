@@ -150,6 +150,13 @@ export default function App() {
     };
   }, [loadInitialData]);
 
+  // Garante que o usuário padrão (vendor) permaneça estritamente na tela de Consulta
+  useEffect(() => {
+    if (authRole === 'vendor' && activeTab !== 'user') {
+      setActiveTab('user');
+    }
+  }, [authRole, activeTab]);
+
   // Handle Submit Request (Single)
   const handleSubmitRequest = async (reqData: Omit<StockRequest, 'id' | 'dataSolicitacao' | 'status'>) => {
     const created = await api.createRequest(reqData);
@@ -291,9 +298,9 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 sm:pb-8">
+      <main className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 ${authRole === 'admin' ? 'pb-28 sm:pb-8' : 'pb-10 sm:pb-8'}`}>
         
-        {/* TAB 1: CONSULTA DE ESTOQUE (VENDEDORES & EQUIPE) */}
+        {/* TAB 1: CONSULTA DE ESTOQUE (USUÁRIO / VENDEDOR) */}
         {activeTab === 'user' && (
           <UserPortal
             requests={requests}
@@ -301,27 +308,45 @@ export default function App() {
             whatsappConfig={whatsappConfig}
             onSubmitRequest={handleSubmitRequest}
             onSubmitOrder={handleSubmitOrder}
-            onViewRequests={() => setActiveTab('requests')}
+            onViewRequests={authRole === 'admin' ? () => setActiveTab('requests') : undefined}
             activeVendor={activeVendor}
             onSelectVendor={handleSelectVendor}
             lastUpdated={catalogMeta.lastUpdated}
           />
         )}
 
-        {/* TAB 2: MINHAS SOLICITAÇÕES (ACOMPANHAMENTO EM TEMPO REAL) */}
+        {/* TAB 2: SOLICITAÇÕES (EXCLUSIVO ADMIN / EXPEDIÇÃO) */}
         {activeTab === 'requests' && (
-          <RequestsHistory
-            requests={requests}
-            vendedores={vendedores}
-            whatsappConfig={whatsappConfig}
-            onDeleteRequest={handleDeleteRequest}
-            onDeleteOrder={handleDeleteOrder}
-            activeVendor={activeVendor}
-            onSelectVendor={handleSelectVendor}
-          />
+          authRole === 'admin' ? (
+            <RequestsHistory
+              requests={requests}
+              vendedores={vendedores}
+              whatsappConfig={whatsappConfig}
+              onDeleteRequest={handleDeleteRequest}
+              onDeleteOrder={handleDeleteOrder}
+              activeVendor={activeVendor}
+              onSelectVendor={handleSelectVendor}
+            />
+          ) : (
+            <div className="bg-white dark:bg-slate-900 p-8 sm:p-12 rounded-2xl border border-slate-200 dark:border-slate-800 text-center max-w-md mx-auto space-y-4 shadow-sm">
+              <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Acesso Exclusivo do Admin</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  O painel de acompanhamento e controle de solicitações pertence ao administrador.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveTab('user')}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
+              >
+                Voltar para a Tela de Consulta
+              </button>
+            </div>
+          )
         )}
 
-        {/* TAB 3: NOVO PAINEL ADMINISTRATIVO */}
+        {/* TAB 3: PAINEL ADMINISTRATIVO (EXCLUSIVO ADMIN) */}
         {activeTab === 'admin' && (
           authRole === 'admin' ? (
             <AdminPortal
@@ -345,20 +370,28 @@ export default function App() {
             <div className="bg-white dark:bg-slate-900 p-8 sm:p-12 rounded-2xl border border-slate-200 dark:border-slate-800 text-center max-w-md mx-auto space-y-4 shadow-sm">
               <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Acesso Restrito</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Acesso Restrito ao Admin</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  O painel de administração e carga em lote requer autenticação.
+                  O painel de administração e configurações pertence ao administrador.
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setLoginError('');
-                  setShowLoginModal(true);
-                }}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
-              >
-                Entrar com Senha de Admin
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setActiveTab('user')}
+                  className="flex-1 py-2.5 px-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  Ir para Consulta
+                </button>
+                <button
+                  onClick={() => {
+                    setLoginError('');
+                    setShowLoginModal(true);
+                  }}
+                  className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
+                >
+                  Entrar como Admin
+                </button>
+              </div>
             </div>
           )
         )}

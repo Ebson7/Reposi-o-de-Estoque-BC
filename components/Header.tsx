@@ -97,55 +97,56 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Botão de Instalar PWA */}
             <PWAInstallButton variant="header" />
 
-            {/* Nav Tabs (Visíveis a partir de sm: - no mobile ficam na barra inferior) */}
-            <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-              <button
-                onClick={() => setActiveTab('user')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  activeTab === 'user'
-                    ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Search className="w-4 h-4" />
-                <span>Consulta</span>
-              </button>
+            {/* Nav Tabs (Exclusivo Admin - para usuário a tela é somente Consulta) */}
+            {authRole === 'admin' ? (
+              <div className="hidden sm:flex bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                <button
+                  onClick={() => setActiveTab('user')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                    activeTab === 'user'
+                      ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Search className="w-4 h-4" />
+                  <span>Consulta</span>
+                </button>
 
-              <button
-                onClick={() => setActiveTab('requests')}
-                className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  activeTab === 'requests'
-                    ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ShoppingCart className="w-4 h-4" />
-                <span>Solicitações</span>
-                {pendingRequestsCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white">
-                    {pendingRequestsCount}
-                  </span>
-                )}
-              </button>
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                    activeTab === 'requests'
+                      ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>Solicitações</span>
+                  {pendingRequestsCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white">
+                      {pendingRequestsCount}
+                    </span>
+                  )}
+                </button>
 
-              <button
-                onClick={() => {
-                  if (authRole === 'admin') {
-                    setActiveTab('admin');
-                  } else {
-                    onOpenLogin('admin');
-                  }
-                }}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  activeTab === 'admin'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Admin</span>
-              </button>
-            </div>
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                    activeTab === 'admin'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Admin</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60 text-xs font-bold">
+                <Search className="w-3.5 h-3.5" />
+                <span>Consulta de Estoque</span>
+              </div>
+            )}
 
             {/* Quick Refresh Button */}
             <button
@@ -186,6 +187,14 @@ export const Header: React.FC<HeaderProps> = ({
 
             {authRole === 'vendor' && (
               <div className="flex items-center space-x-1.5">
+                <button
+                  onClick={() => onOpenLogin('admin')}
+                  title="Acesso Administrativo (Senha Admin)"
+                  className="flex items-center space-x-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline">Admin</span>
+                </button>
                 <span className="hidden md:inline-flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   <User className="w-3.5 h-3.5" />
                   <span>Usuário</span>
