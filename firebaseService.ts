@@ -394,14 +394,40 @@ export const firebaseService = {
       console.log(`[Firebase] Iniciando persistência de ${products.length} produtos no Firestore...`);
       await this.updateCatalogMeta(meta);
 
-      const CHUNK_SIZE = 400;
-      for (let i = 0; i < products.length; i += CHUNK_SIZE) {
-        const chunk = products.slice(i, i + CHUNK_SIZE);
+      // 1. Salvar em blocos compactos (catalog_chunks) para carregamento ultrarrápido
+      const CHUNK_SIZE = 300;
+      const totalChunks = Math.ceil(products.length / CHUNK_SIZE);
+
+      const chunkBatch = writeBatch(db);
+      // Salva sumário de chunks
+      const metaChunksRef = doc(db, 'config', 'chunks_meta');
+      chunkBatch.set(metaChunksRef, {
+        totalChunks,
+        totalProducts: products.length,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      for (let c = 0; c < totalChunks; c++) {
+        const slice = products.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+        const chunkDocRef = doc(db, 'catalog_chunks', `chunk_${c}`);
+        chunkBatch.set(chunkDocRef, { items: slice, index: c });
+      }
+      await chunkBatch.commit();
+
+      // 2. Salva também individualmente em /products com IDs sanitizados
+      const INDIVIDUAL_BATCH_SIZE = 250;
+      for (let i = 0; i < products.length; i += INDIVIDUAL_BATCH_SIZE) {
+        const chunk = products.slice(i, i + INDIVIDUAL_BATCH_SIZE);
         const batch = writeBatch(db);
 
-        chunk.forEach(prod => {
-          const docRef = doc(db, 'products', prod.codigo || prod.id);
-          batch.set(docRef, prod);
+        chunk.forEach((prod, pIdx) => {
+          const rawId = prod.codigo || prod.novoCodigo || prod.id || `p_${i + pIdx}`;
+          const safeId = String(rawId)
+            .replace(/[\/\\]/g, '_')
+            .replace(/\s+/g, '-')
+            .slice(0, 100);
+          const docRef = doc(db, 'products', safeId);
+          batch.set(docRef, prod, { merge: true });
         });
 
         await batch.commit();
@@ -416,6 +442,31 @@ export const firebaseService = {
 
   async getProductsFromFirestore(): Promise<Product[]> {
     try {
+      // 1. Tenta carregar primeiro por chunks compactos (muito mais rápido e consome menos cota)
+      const chunksColRef = collection(db, 'catalog_chunks');
+      const chunksSnap = await getDocs(chunksColRef);
+
+      if (!chunksSnap.empty) {
+        const allItems: Product[] = [];
+        const sortedDocs = chunksSnap.docs.sort((a, b) => {
+          const idxA = a.data().index ?? 0;
+          const idxB = b.data().index ?? 0;
+          return idxA - idxB;
+        });
+
+        sortedDocs.forEach(d => {
+          const data = d.data();
+          if (Array.isArray(data.items)) {
+            allItems.push(...data.items);
+          }
+        });
+
+        if (allItems.length > 0) {
+          return allItems;
+        }
+      }
+
+      // 2. Fallback para coleção individual /products
       const colRef = collection(db, 'products');
       const snapshot = await getDocs(colRef);
       const list: Product[] = [];

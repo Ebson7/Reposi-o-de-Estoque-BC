@@ -141,11 +141,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         csvContent = text;
       }
 
-      if (!csvContent || csvContent.trim().length === 0) {
-        throw new Error("Nenhum dado legível foi extraído do arquivo selecionado.");
+      let res;
+      if (isExcelFile || hasZipSignature) {
+        res = await api.uploadBatch(arrayBuffer, file.name);
+      } else {
+        if (!csvContent || csvContent.trim().length === 0) {
+          throw new Error("Nenhum dado legível foi extraído do arquivo selecionado.");
+        }
+        res = await api.uploadBatch(csvContent, file.name);
       }
-
-      const res = await api.uploadBatch(csvContent, file.name);
       setUploadStatus({
         type: 'success',
         message: `Sucesso: ${res.count.toLocaleString('pt-BR')} produtos importados e sincronizados com sucesso!`

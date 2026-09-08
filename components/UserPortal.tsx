@@ -254,7 +254,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [searchTerm, selectedFornecedor, selectedSituacao, selectedEstoque]);
+  }, [searchTerm, selectedFornecedor, selectedSituacao, selectedEstoque, lastUpdated]);
 
   // Debounced search on term/filter changes
   useEffect(() => {
