@@ -151,7 +151,23 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
         solicitante,
         tipoGeral,
         observacoesGerais: observacoesGerais.trim(),
-        items: orderItems
+        items: orderItems.map(item => ({
+          productId: item.productId || item.productCode,
+          productCode: item.productCode || '',
+          productNovoCodigo: item.productNovoCodigo || '',
+          productName: item.productName || '',
+          productSabor: item.productSabor || '',
+          productSituacao: item.productSituacao || 'NO',
+          fornecedor: item.fornecedor || 'GERAL',
+          embalagem: item.embalagem || item.unidade || 'CX',
+          quantidade: Number(item.quantidade) || 1,
+          unidade: item.unidade || 'CX',
+          tipo: item.tipo || tipoGeral || 'Aposta na Venda',
+          isValidadeCurta: !!item.isValidadeCurta,
+          observacoes: item.observacoes || '',
+          estoqueMarsilMomento: typeof item.estoqueMarsilMomento === 'number' ? item.estoqueMarsilMomento : 0,
+          estoqueBoraceiaMomento: typeof item.estoqueBoraceiaMomento === 'number' ? item.estoqueBoraceiaMomento : 0,
+        }))
       };
 
       await onSubmitOrder(payload, sendWhatsApp);

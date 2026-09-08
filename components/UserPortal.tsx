@@ -82,7 +82,17 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const [orderItems, setOrderItems] = useState<OrderItem[]>(() => {
     try {
       const saved = localStorage.getItem('marsil_order_cart_items');
-      return saved ? JSON.parse(saved) : [];
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((item: any) => ({
+        ...item,
+        productSituacao: item.productSituacao || 'NO',
+        productNovoCodigo: item.productNovoCodigo || '',
+        productSabor: item.productSabor || '',
+        fornecedor: item.fornecedor || 'GERAL',
+        estoqueMarsilMomento: typeof item.estoqueMarsilMomento === 'number' ? item.estoqueMarsilMomento : 0,
+        estoqueBoraceiaMomento: typeof item.estoqueBoraceiaMomento === 'number' ? item.estoqueBoraceiaMomento : 0,
+      }));
     } catch {
       return [];
     }
@@ -114,15 +124,16 @@ export const UserPortal: React.FC<UserPortalProps> = ({
         const newItem: OrderItem = {
           productId: prod.id,
           productCode: prod.codigo,
-          productNovoCodigo: prod.novoCodigo,
+          productNovoCodigo: prod.novoCodigo || '',
           productName: prod.produto,
-          productSabor: prod.sabor,
-          fornecedor: prod.fornecedor,
+          productSabor: prod.sabor || '',
+          productSituacao: prod.situacao || 'NO',
+          fornecedor: prod.fornecedor || 'GERAL',
           quantidade: 1,
           unidade: (prod.embalagem && UNIT_OPTIONS.includes(prod.embalagem as UnitType)) ? prod.embalagem as UnitType : 'CX',
           tipo: 'Aposta na Venda',
-          estoqueMarsilMomento: prod.estoqueMarsil,
-          estoqueBoraceiaMomento: prod.estoqueBoraceia,
+          estoqueMarsilMomento: prod.estoqueMarsil ?? 0,
+          estoqueBoraceiaMomento: prod.estoqueBoraceia ?? 0,
           isValidadeCurta: prod.situacao === 'DV'
         };
         return [...prev, newItem];
@@ -326,18 +337,19 @@ export const UserPortal: React.FC<UserPortalProps> = ({
       const saved = await onSubmitRequest({
         productId: selectedProduct.id,
         productCode: selectedProduct.codigo,
+        productNovoCodigo: selectedProduct.novoCodigo || '',
         productName: selectedProduct.produto,
-        productSabor: selectedProduct.sabor,
-        productSituacao: selectedProduct.situacao,
-        fornecedor: selectedProduct.fornecedor,
+        productSabor: selectedProduct.sabor || '',
+        productSituacao: selectedProduct.situacao || 'NO',
+        fornecedor: selectedProduct.fornecedor || 'GERAL',
         quantidade,
         unidade,
         tipo,
         solicitante,
-        observacoes,
+        observacoes: observacoes || '',
         isValidadeCurta,
-        estoqueMarsilMomento: selectedProduct.estoqueMarsil,
-        estoqueBoraceiaMomento: selectedProduct.estoqueBoraceia
+        estoqueMarsilMomento: typeof selectedProduct.estoqueMarsil === 'number' ? selectedProduct.estoqueMarsil : 0,
+        estoqueBoraceiaMomento: typeof selectedProduct.estoqueBoraceia === 'number' ? selectedProduct.estoqueBoraceia : 0
       });
 
       setRequestSuccess(true);

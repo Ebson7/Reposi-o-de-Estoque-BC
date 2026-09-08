@@ -62,6 +62,31 @@ export const DEFAULT_CATALOG_META: CatalogMeta = {
   itensZerados: 0
 };
 
+/**
+ * Remove recursivamente campos com valor 'undefined' para compatibilidade estrita com a API do Firestore
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeForFirestore(item)) as any;
+  }
+  if (typeof data === 'object') {
+    if (data && data.constructor && (data.constructor.name === 'FieldValue' || data.constructor.name === 'Timestamp')) {
+      return data;
+    }
+    const clean: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        clean[key] = sanitizeForFirestore(value);
+      }
+    }
+    return clean;
+  }
+  return data;
+}
+
 export const firebaseService = {
   // ========================================================
   // 1. SOLICITAÇÕES E PEDIDOS EM TEMPO REAL (FIRESTORE)
@@ -86,21 +111,22 @@ export const firebaseService = {
           observacoesGeraisPedido: data.observacoesGeraisPedido || '',
           productId: data.productId || data.productCode || docSnap.id,
           productCode: data.productCode || '',
+          productNovoCodigo: data.productNovoCodigo || '',
           productName: data.productName || '',
           productSabor: data.productSabor || '',
-          productSituacao: data.productSituacao,
-          fornecedor: data.fornecedor,
-          unidade: (data.unidade as UnitType) || 'UN',
+          productSituacao: data.productSituacao || 'NO',
+          fornecedor: data.fornecedor || 'GERAL',
+          unidade: (data.unidade as UnitType) || 'CX',
           quantidade: Number(data.quantidade) || 1,
-          tipo: (data.tipo as RequestType) || 'Carga Padrão' as any,
+          tipo: (data.tipo as RequestType) || 'Aposta na Venda',
           solicitante: data.solicitante || 'Não Identificado',
           dataSolicitacao: data.dataSolicitacao || new Date().toISOString(),
           status: (data.status as RequestStatus) || 'Pendente',
           observacoes: data.observacoes || '',
           respostaAdmin: data.respostaAdmin || '',
           isValidadeCurta: !!data.isValidadeCurta,
-          estoqueMarsilMomento: data.estoqueMarsilMomento,
-          estoqueBoraceiaMomento: data.estoqueBoraceiaMomento
+          estoqueMarsilMomento: typeof data.estoqueMarsilMomento === 'number' ? data.estoqueMarsilMomento : 0,
+          estoqueBoraceiaMomento: typeof data.estoqueBoraceiaMomento === 'number' ? data.estoqueBoraceiaMomento : 0
         });
       });
 
@@ -130,13 +156,19 @@ export const firebaseService = {
       status: 'Pendente',
       dataSolicitacao: now,
       observacoes: reqData.observacoes || '',
-      respostaAdmin: ''
+      respostaAdmin: '',
+      productSituacao: reqData.productSituacao || 'NO',
+      productNovoCodigo: reqData.productNovoCodigo || '',
+      productSabor: reqData.productSabor || '',
+      fornecedor: reqData.fornecedor || 'GERAL',
+      estoqueMarsilMomento: typeof reqData.estoqueMarsilMomento === 'number' ? reqData.estoqueMarsilMomento : 0,
+      estoqueBoraceiaMomento: typeof reqData.estoqueBoraceiaMomento === 'number' ? reqData.estoqueBoraceiaMomento : 0
     };
 
-    await setDoc(docRef, {
+    await setDoc(docRef, sanitizeForFirestore({
       ...newRequest,
       serverTime: serverTimestamp()
-    });
+    }));
 
     return newRequest;
   },
@@ -148,7 +180,7 @@ export const firebaseService = {
     const batch = writeBatch(db);
     const now = new Date().toISOString();
     const pedidoId = `ped_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const pedidoNumero = `${Math.floor(100000 + Math.random() * 900000)}`;
+    const pedidoNumero = payload.pedidoNumero || `${Math.floor(100000 + Math.random() * 900000)}`;
 
     const createdRequests: StockRequest[] = [];
 
@@ -161,30 +193,31 @@ export const firebaseService = {
         pedidoId,
         pedidoNumero,
         observacoesGeraisPedido: payload.observacoesGerais || '',
-        productId: item.productId || item.productCode,
-        productCode: item.productCode,
-        productName: item.productName,
+        productId: item.productId || item.productCode || id,
+        productCode: item.productCode || '',
+        productNovoCodigo: item.productNovoCodigo || '',
+        productName: item.productName || '',
         productSabor: item.productSabor || '',
-        productSituacao: item.productSituacao,
-        fornecedor: item.fornecedor,
-        unidade: item.unidade,
-        quantidade: item.quantidade,
+        productSituacao: item.productSituacao || 'NO',
+        fornecedor: item.fornecedor || 'GERAL',
+        unidade: item.unidade || 'CX',
+        quantidade: Number(item.quantidade) || 1,
         tipo: item.tipo || payload.tipoGeral || 'Aposta na Venda',
-        solicitante: payload.solicitante,
+        solicitante: payload.solicitante || 'Não Identificado',
         dataSolicitacao: now,
         status: 'Pendente',
         observacoes: item.observacoes || payload.observacoesGerais || '',
         respostaAdmin: '',
         isValidadeCurta: !!item.isValidadeCurta,
-        estoqueMarsilMomento: item.estoqueMarsilMomento,
-        estoqueBoraceiaMomento: item.estoqueBoraceiaMomento
+        estoqueMarsilMomento: typeof item.estoqueMarsilMomento === 'number' ? item.estoqueMarsilMomento : 0,
+        estoqueBoraceiaMomento: typeof item.estoqueBoraceiaMomento === 'number' ? item.estoqueBoraceiaMomento : 0
       };
 
       createdRequests.push(fullItem);
-      batch.set(docRef, {
+      batch.set(docRef, sanitizeForFirestore({
         ...fullItem,
         serverTime: serverTimestamp()
-      });
+      }));
     });
 
     await batch.commit();
@@ -410,7 +443,7 @@ export const firebaseService = {
       for (let c = 0; c < totalChunks; c++) {
         const slice = products.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
         const chunkDocRef = doc(db, 'catalog_chunks', `chunk_${c}`);
-        chunkBatch.set(chunkDocRef, { items: slice, index: c });
+        chunkBatch.set(chunkDocRef, sanitizeForFirestore({ items: slice, index: c }));
       }
       await chunkBatch.commit();
 
@@ -427,7 +460,7 @@ export const firebaseService = {
             .replace(/\s+/g, '-')
             .slice(0, 100);
           const docRef = doc(db, 'products', safeId);
-          batch.set(docRef, prod, { merge: true });
+          batch.set(docRef, sanitizeForFirestore(prod), { merge: true });
         });
 
         await batch.commit();
