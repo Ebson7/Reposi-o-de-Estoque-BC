@@ -184,25 +184,6 @@ ${req.isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${req.observ
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const handleSendGroupWhatsApp = (group: OrderGroup) => {
-    const text = buildGroupWhatsAppText(group);
-    const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  const handleSendSingleWhatsApp = (req: StockRequest) => {
-    const msg = encodeURIComponent(`*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
-📦 *Produto:* ${req.productName}
-🔢 *Código:* ${req.productCode}
-📊 *Quantidade:* ${req.quantidade} ${req.unidade}
-🎯 *Tipo:* ${req.tipo}
-👤 *Solicitante:* ${req.solicitante}
-${req.observacoes ? `📝 *Obs:* ${req.observacoes}\n` : ''}📌 *Status Atual:* ${req.status}`);
-
-    const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-  };
-
   const renderStatusBadge = (status: RequestStatus | 'Parcial') => {
     switch (status) {
       case 'Aprovado':
@@ -500,18 +481,10 @@ ${req.observacoes ? `📝 *Obs:* ${req.observacoes}\n` : ''}📌 *Status Atual:*
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleCopyGroupMessage(group)}
-                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs font-bold transition-colors"
                       >
-                        {copiedId === group.pedidoId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedId === group.pedidoId ? 'Copiado!' : 'Copiar Pedido'}</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleSendGroupWhatsApp(group)}
-                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Reenviar no WhatsApp</span>
+                        {copiedId === group.pedidoId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
+                        <span>{copiedId === group.pedidoId ? 'Pedido Copiado!' : 'Copiar Pedido para WhatsApp'}</span>
                       </button>
                     </div>
 
@@ -634,18 +607,10 @@ ${req.observacoes ? `📝 *Obs:* ${req.observacoes}\n` : ''}📌 *Status Atual:*
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => handleCopySingleMessage(req)}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
-                    >
-                      {copiedId === req.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedId === req.id ? 'Copiado!' : 'Copiar'}</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleSendSingleWhatsApp(req)}
                       className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs font-semibold transition-colors"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>WhatsApp</span>
+                      {copiedId === req.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
+                      <span>{copiedId === req.id ? 'Texto Copiado!' : 'Copiar para WhatsApp'}</span>
                     </button>
                   </div>
 

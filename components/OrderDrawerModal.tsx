@@ -16,7 +16,8 @@ import {
   CheckCircle2, 
   Clock, 
   ArrowRight,
-  Package
+  Package,
+  Loader2
 } from 'lucide-react';
 import { OrderItem, UnitType, RequestType, WhatsAppConfig, CreateOrderPayload, StockRequest } from '../types';
 
@@ -68,7 +69,6 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
   const [submittedOrderInfo, setSubmittedOrderInfo] = useState<{
     pedidoNumero: string;
     count: number;
-    whatsappUrl?: string;
     messageText: string;
   } | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
@@ -134,7 +134,7 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
   };
 
   // Submit Order
-  const handleConfirmSubmit = async (sendWhatsApp: boolean) => {
+  const handleConfirmSubmit = async () => {
     if (orderItems.length === 0) return;
     if (!solicitante) {
       alert("Por favor, selecione o solicitante/vendedor.");
@@ -170,21 +170,12 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
         }))
       };
 
-      await onSubmitOrder(payload, sendWhatsApp);
+      await onSubmitOrder(payload, false);
       onSelectVendor(solicitante);
-
-      const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-      const encodedMsg = encodeURIComponent(messageText);
-      const whatsappUrl = `https://wa.me/${phone}?text=${encodedMsg}`;
-
-      if (sendWhatsApp) {
-        window.open(whatsappUrl, '_blank');
-      }
 
       setSubmittedOrderInfo({
         pedidoNumero: generatedOrderNum,
         count: orderItems.length,
-        whatsappUrl,
         messageText
       });
 
@@ -251,17 +242,14 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
 
             {/* Actions */}
             <div className="w-full flex flex-col sm:flex-row gap-3 pt-2">
-              {submittedOrderInfo.whatsappUrl && (
-                <a
-                  href={submittedOrderInfo.whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 transition-colors"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Reenviar pelo WhatsApp</span>
-                </a>
-              )}
+              <button
+                type="button"
+                onClick={() => handleCopyMessage(submittedOrderInfo.messageText)}
+                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2 transition-colors"
+              >
+                {copiedSuccess ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedSuccess ? 'Mensagem Copiada!' : 'Copiar Pedido para o WhatsApp'}</span>
+              </button>
               {onViewRequests && (
                 <button
                   type="button"
@@ -546,27 +534,17 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
                 <button
                   type="button"
                   disabled={orderItems.length === 0 || isSubmitting}
-                  onClick={() => handleConfirmSubmit(true)}
-                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2 transition-all"
+                  onClick={() => handleConfirmSubmit()}
+                  className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center space-x-2 transition-all"
                 >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Processando...' : 'Finalizar e Enviar no WhatsApp'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={orderItems.length === 0 || isSubmitting}
-                  onClick={() => handleConfirmSubmit(false)}
-                  className="py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center space-x-2 transition-all"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Apenas Salvar no Sistema</span>
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>{isSubmitting ? 'Gravando Pedido...' : 'Finalizar Pedido'}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={onClose}
-                  className="py-3 px-4 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm rounded-xl transition-colors"
+                  className="py-3 px-5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm rounded-xl transition-colors"
                 >
                   Continuar Escolhendo
                 </button>

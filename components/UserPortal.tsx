@@ -328,13 +328,13 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   };
 
   // Submit Request
-  const handleSubmitRequest = async (e: React.FormEvent, sendWhatsApp = false) => {
+  const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || quantidade <= 0 || !solicitante) return;
 
     setIsSubmitting(true);
     try {
-      const saved = await onSubmitRequest({
+      await onSubmitRequest({
         productId: selectedProduct.id,
         productCode: selectedProduct.codigo,
         productNovoCodigo: selectedProduct.novoCodigo || '',
@@ -354,20 +354,6 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
       setRequestSuccess(true);
       onSelectVendor(solicitante);
-
-      if (sendWhatsApp) {
-        const msg = encodeURIComponent(`*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
-📦 *Produto:* ${selectedProduct.produto}
-🔢 *Código:* ${selectedProduct.codigo}
-🍓 *Sabor:* ${selectedProduct.sabor || 'Padrão'}
-📊 *Quantidade:* ${quantidade} ${unidade}
-🎯 *Tipo:* ${tipo}
-👤 *Solicitante:* ${solicitante}
-${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? `📝 *Obs:* ${observacoes}\n` : ''}🏢 *Estoque Marsil:* ${selectedProduct.estoqueMarsil} | *Boracéia:* ${selectedProduct.estoqueBoraceia}`);
-
-        const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-      }
 
       setTimeout(() => {
         setSelectedProduct(null);
@@ -1030,7 +1016,7 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={(e) => handleSubmitRequest(e, false)} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitRequest} className="p-6 space-y-4">
               
               {/* Current Stocks Display */}
               <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-center text-xs">
@@ -1163,36 +1149,23 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                   <p className="text-xs">Sincronizada em tempo real com a administração.</p>
                 </div>
               ) : (
-                <div className="space-y-2 pt-2">
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 transition-colors"
-                    >
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                      <span>Registrar no Sistema</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleSubmitRequest(e, true)}
-                      disabled={isSubmitting}
-                      className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-1.5 transition-colors"
-                      title="Registrar e abrir WhatsApp"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      <span className="hidden sm:inline">Enviar WhatsApp</span>
-                    </button>
-                  </div>
+                <div className="space-y-2.5 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-md flex items-center justify-center space-x-2 transition-colors"
+                  >
+                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>Registrar Solicitação no Sistema</span>
+                  </button>
 
                   <button
                     type="button"
                     onClick={copyModalMessage}
-                    className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-colors"
+                    className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-xs rounded-xl flex items-center justify-center space-x-2 transition-colors"
                   >
-                    {copiedMsg ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedMsg ? 'Mensagem Copiada!' : 'Copiar texto para WhatsApp'}</span>
+                    {copiedMsg ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-emerald-600" />}
+                    <span>{copiedMsg ? 'Texto Copiado para o WhatsApp!' : 'Copiar Mensagem para Enviar no WhatsApp'}</span>
                   </button>
                 </div>
               )}

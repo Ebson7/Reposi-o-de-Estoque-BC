@@ -28,7 +28,8 @@ import {
   KeyRound,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Copy
 } from 'lucide-react';
 import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta } from '../types';
 import { api } from '../api';
@@ -92,6 +93,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Vendedores Tab
   const [newVendorName, setNewVendorName] = useState('');
   const [vendorSearch, setVendorSearch] = useState('');
+  const [copiedAdminId, setCopiedAdminId] = useState<string | null>(null);
 
   // WhatsApp Config
   const [waNumber, setWaNumber] = useState(whatsappConfig.phoneNumber);
@@ -372,19 +374,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  // Enviar feedback ao vendedor pelo WhatsApp
-  const handleNotifyVendorWhatsApp = (req: StockRequest) => {
+  // Copiar feedback ao vendedor para WhatsApp
+  const handleCopyVendorReturn = (req: StockRequest) => {
     const statusText = req.status === 'Aprovado' ? '✅ APROVADA' : '❌ NÃO APROVADA';
-    const msg = encodeURIComponent(`*RETORNO DE SOLICITAÇÃO - BORACÉIA*
-Olá *${req.solicitante}*, sua solicitação para o item:
-📦 *${req.productName}* (Cód: ${req.productCode})
-📊 *Quantidade:* ${req.quantidade} ${req.unidade}
+    const msg = `*RETORNO DE SOLICITAÇÃO - BORACÉIA*\n` +
+      `Olá *${req.solicitante}*, sua solicitação para o item:\n` +
+      `📦 *${req.productName}* (Cód: ${req.productCode})\n` +
+      `📊 *Quantidade:* ${req.quantidade} ${req.unidade}\n\n` +
+      `📌 *Status:* ${statusText}\n` +
+      `${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}\n` : ''}`;
 
-📌 *Status:* ${statusText}
-${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}` : ''}`);
-
-    const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    navigator.clipboard.writeText(msg);
+    setCopiedAdminId(req.id);
+    setTimeout(() => setCopiedAdminId(null), 2500);
   };
 
   const filteredRequests = requests.filter(r => {
@@ -478,7 +480,7 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
     }
   };
 
-  const handleNotifyOrderWhatsApp = (group: typeof adminOrderGroups[0]) => {
+  const handleCopyOrderReturn = (group: typeof adminOrderGroups[0]) => {
     const statusText = group.status === 'Aprovado' ? '✅ APROVADO' : group.status === 'Recusado' ? '❌ NÃO APROVADO' : '📋 ' + group.status.toUpperCase();
     let msg = `*RETORNO DE PEDIDO DE ESTOQUE - BORACÉIA*\n`;
     msg += `Olá *${group.solicitante}*,\n`;
@@ -488,8 +490,9 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
       msg += `${idx + 1}) [${it.productCode}] ${it.productName} (${it.quantidade} ${it.unidade}) - Status: ${it.status}\n`;
       if (it.respostaAdmin) msg += `   Obs: ${it.respostaAdmin}\n`;
     });
-    const phone = whatsappConfig.phoneNumber.replace(/\D/g, '');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    navigator.clipboard.writeText(msg);
+    setCopiedAdminId(group.pedidoId);
+    setTimeout(() => setCopiedAdminId(null), 2500);
   };
 
   const filteredVendors = vendedores.filter(v => 
@@ -1071,11 +1074,11 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
                           </button>
 
                           <button
-                            onClick={() => handleNotifyOrderWhatsApp(group)}
+                            onClick={() => handleCopyOrderReturn(group)}
                             className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-colors"
                           >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>Notificar WhatsApp</span>
+                            {copiedAdminId === group.pedidoId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
+                            <span>{copiedAdminId === group.pedidoId ? 'Retorno Copiado!' : 'Copiar Retorno p/ WhatsApp'}</span>
                           </button>
                         </div>
 
@@ -1218,11 +1221,11 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
                         </button>
 
                         <button
-                          onClick={() => handleNotifyVendorWhatsApp(req)}
+                          onClick={() => handleCopyVendorReturn(req)}
                           className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-colors"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>Notificar Vendedor WhatsApp</span>
+                          {copiedAdminId === req.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
+                          <span>{copiedAdminId === req.id ? 'Retorno Copiado!' : 'Copiar Retorno p/ WhatsApp'}</span>
                         </button>
                       </div>
 
@@ -1316,55 +1319,23 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
       )}
 
       {/* ==========================================
-          TAB 4: CONFIGURAÇÕES GERAIS
+          TAB 4: CONFIGURAÇÕES E SEGURANÇA
           ========================================== */}
       {activeSubTab === 'config' && (
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Configurações de Notificação WhatsApp
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Defina o número da expedição/gerência que receberá as mensagens formatadas de solicitação de estoque.
+          
+          {/* Informação sobre Envio pelo WhatsApp por Cópia */}
+          <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
+            <div className="flex items-center space-x-2 text-emerald-800 dark:text-emerald-300">
+              <Copy className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-sm font-bold">
+                Envio pelo WhatsApp via Cópia de Mensagem
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              O sistema não envia mensagens para um número fixo de WhatsApp. Tanto os vendedores quanto a equipe de expedição copiam as mensagens formatadas de pedidos e retornos com apenas 1 clique através dos botões <strong>"Copiar para WhatsApp"</strong> e colam livremente no WhatsApp no contato, conversa ou grupo desejado.
             </p>
           </div>
-
-          <form onSubmit={handleSaveWhatsApp} className="max-w-md space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Número de Destino (com DDD)
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  value={waNumber}
-                  onChange={(e) => setWaNumber(e.target.value)}
-                  placeholder="Ex: 5511999999999"
-                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                Formato internacional com DDI: Ex: 55 (Brasil) + DDD + Telefone (ex: 5511987654321)
-              </span>
-            </div>
-
-            {waSavedSuccess && (
-              <div className="text-xs text-emerald-600 font-bold flex items-center space-x-1">
-                <Check className="w-4 h-4" />
-                <span>Configurações salvas no Firebase Firestore com sucesso!</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSavingWa}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-colors"
-            >
-              {isSavingWa ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              <span>Salvar no Firebase</span>
-            </button>
-          </form>
 
           {/* ========================================================
               SENHAS DE ACESSO (USUÁRIO E ADMINISTRADOR)
