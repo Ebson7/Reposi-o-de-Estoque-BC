@@ -24,9 +24,13 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  List
+  List,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { StockRequest, WhatsAppConfig, CatalogMeta } from '../types';
+import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta } from '../types';
 import { api } from '../api';
 
 interface AdminPortalProps {
@@ -34,6 +38,7 @@ interface AdminPortalProps {
   vendedores: string[];
   whatsappConfig: WhatsAppConfig;
   catalogMeta: CatalogMeta;
+  securityConfig: SecurityConfig;
   onUpdateRequestStatus: (id: string, status: 'Pendente' | 'Aprovado' | 'Recusado', resposta?: string) => Promise<void>;
   onUpdateOrderGroupStatus?: (pedidoId: string, status: 'Aprovado' | 'Recusado' | 'Pendente', respostaAdmin?: string) => Promise<any>;
   onDeleteRequest: (id: string) => Promise<void>;
@@ -42,6 +47,7 @@ interface AdminPortalProps {
   onAddVendedor: (name: string) => Promise<void>;
   onRemoveVendedor: (name: string) => Promise<void>;
   onUpdateWhatsApp: (config: Partial<WhatsAppConfig>) => Promise<void>;
+  onUpdateSecurityConfig: (config: Partial<SecurityConfig>) => Promise<void>;
   onBatchUploaded: (count: number, meta: CatalogMeta) => void;
 }
 
@@ -50,6 +56,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   vendedores,
   whatsappConfig,
   catalogMeta,
+  securityConfig,
   onUpdateRequestStatus,
   onUpdateOrderGroupStatus,
   onDeleteRequest,
@@ -58,6 +65,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onAddVendedor,
   onRemoveVendedor,
   onUpdateWhatsApp,
+  onUpdateSecurityConfig,
   onBatchUploaded
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'upload' | 'requests' | 'vendedores' | 'config'>('upload');
@@ -89,6 +97,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [waNumber, setWaNumber] = useState(whatsappConfig.phoneNumber);
   const [isSavingWa, setIsSavingWa] = useState(false);
   const [waSavedSuccess, setWaSavedSuccess] = useState(false);
+
+  // Senhas de Acesso (Segurança)
+  const [adminPass, setAdminPass] = useState(securityConfig.adminPassword || '@adminmarsil2026');
+  const [userPass, setUserPass] = useState(securityConfig.userPassword || '@marsil2026');
+  const [showAdminPass, setShowAdminPass] = useState(false);
+  const [showUserPass, setShowUserPass] = useState(false);
+  const [isSavingSecurity, setIsSavingSecurity] = useState(false);
+  const [securitySavedSuccess, setSecuritySavedSuccess] = useState(false);
+
+  // Sync state if securityConfig updates from Firebase
+  React.useEffect(() => {
+    if (securityConfig.adminPassword) setAdminPass(securityConfig.adminPassword);
+    if (securityConfig.userPassword) setUserPass(securityConfig.userPassword);
+  }, [securityConfig.adminPassword, securityConfig.userPassword]);
+
+  const handleSaveSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminPass.trim()) {
+      alert("A senha de administrador não pode ser vazia.");
+      return;
+    }
+    if (!userPass.trim()) {
+      alert("A senha de usuário não pode ser vazia.");
+      return;
+    }
+
+    setIsSavingSecurity(true);
+    try {
+      await onUpdateSecurityConfig({
+        adminPassword: adminPass.trim(),
+        userPassword: userPass.trim()
+      });
+      setSecuritySavedSuccess(true);
+      setTimeout(() => setSecuritySavedSuccess(false), 4000);
+    } catch (err) {
+      console.error("Erro ao salvar senhas de acesso:", err);
+      alert("Erro ao salvar novas senhas no Firebase.");
+    } finally {
+      setIsSavingSecurity(false);
+    }
+  };
 
   // View Mode for Requests tab
   const [adminViewMode, setAdminViewMode] = useState<'grouped' | 'individual'>('grouped');
@@ -1316,6 +1365,99 @@ ${req.respostaAdmin ? `📝 *Observação da Expedição:* ${req.respostaAdmin}`
               <span>Salvar no Firebase</span>
             </button>
           </form>
+
+          {/* ========================================================
+              SENHAS DE ACESSO (USUÁRIO E ADMINISTRADOR)
+              ======================================================== */}
+          <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Senhas de Acesso do Sistema (Segurança)
+                </h4>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Configure as senhas necessárias para os usuários (vendedores) e administradores acessarem o aplicativo. As novas senhas entram em vigor imediatamente para todos os dispositivos conectados.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveSecurity} className="max-w-md space-y-4">
+              {/* Senha de Usuário */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Senha de Usuário / Vendedor
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type={showUserPass ? 'text' : 'password'}
+                    value={userPass}
+                    onChange={(e) => setUserPass(e.target.value)}
+                    placeholder="Defina a senha de usuário..."
+                    required
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowUserPass(!showUserPass)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    {showUserPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  Utilizada pelos representantes e equipe para consultar o estoque e enviar pedidos.
+                </span>
+              </div>
+
+              {/* Senha de Administrador */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Senha de Administrador
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type={showAdminPass ? 'text' : 'password'}
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    placeholder="Defina a senha de admin..."
+                    required
+                    className="w-full pl-9 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPass(!showAdminPass)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  Permite o acesso à área de carga em lote de planilhas, aprovação de pedidos e configurações.
+                </span>
+              </div>
+
+              {securitySavedSuccess && (
+                <div className="text-xs text-emerald-600 font-bold flex items-center space-x-1 animate-fade-in">
+                  <Check className="w-4 h-4" />
+                  <span>Senhas de acesso atualizadas com sucesso no Firebase Firestore!</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSavingSecurity}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-colors"
+              >
+                {isSavingSecurity ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                <span>Atualizar Senhas no Firebase</span>
+              </button>
+            </form>
+          </div>
 
           {/* Status do Banco de Dados Firebase */}
           <div className="pt-6 border-t border-slate-200 dark:border-slate-800">

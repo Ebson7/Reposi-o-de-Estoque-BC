@@ -5,18 +5,19 @@ import { AdminPortal } from './components/AdminPortal';
 import { RequestsHistory } from './components/RequestsHistory';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, CreateOrderPayload } from './types';
+import { LoginGate } from './components/LoginGate';
+import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, CreateOrderPayload } from './types';
 import { api } from './api';
-import { firebaseService } from './firebaseService';
+import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
 import { KeyRound, X, ShieldAlert, Loader2 } from 'lucide-react';
-
-const ADMIN_PASSWORD = '123'; // Senha padrão administrativa
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'user' | 'requests' | 'admin'>('user');
   const [authRole, setAuthRole] = useState<'none' | 'vendor' | 'admin'>(() => {
     return (localStorage.getItem('marsil_auth_role') as any) || 'none';
   });
+
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(DEFAULT_SECURITY_CONFIG);
 
   const [activeVendor, setActiveVendor] = useState<string>(() => {
     return localStorage.getItem('marsil_active_vendor') || '';
@@ -133,11 +134,19 @@ export default function App() {
       }
     });
 
+    // 5. Escuta senhas de acesso em tempo real no Firestore
+    const unsubSecurity = firebaseService.subscribeToSecurityConfig((liveSec) => {
+      if (liveSec) {
+        setSecurityConfig(liveSec);
+      }
+    });
+
     return () => {
       unsubRequests();
       unsubVendedores();
       unsubWhatsApp();
       unsubCatalogMeta();
+      unsubSecurity();
     };
   }, [loadInitialData]);
 
@@ -209,10 +218,17 @@ export default function App() {
     setCatalogMeta(meta);
   };
 
-  // Admin Login
+  // Handle Security Passwords Config
+  const handleUpdateSecurityConfig = async (cfg: Partial<SecurityConfig>) => {
+    const updated = await api.updateSecurityConfig(cfg);
+    setSecurityConfig(updated);
+  };
+
+  // Admin Login Modal Submission
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === ADMIN_PASSWORD) {
+    const adminExpected = securityConfig.adminPassword || '@adminmarsil2026';
+    if (passwordInput.trim() === adminExpected) {
       setAuthRole('admin');
       localStorage.setItem('marsil_auth_role', 'admin');
       setShowLoginModal(false);
@@ -220,7 +236,7 @@ export default function App() {
       setLoginError('');
       setActiveTab('admin');
     } else {
-      setLoginError('Senha administrativa incorreta.');
+      setLoginError(`Senha administrativa incorreta.`);
     }
   };
 
@@ -229,6 +245,27 @@ export default function App() {
     localStorage.removeItem('marsil_auth_role');
     setActiveTab('user');
   };
+
+  // Se o usuário ainda não autenticou (authRole === 'none'), exibe a tela de login com senha de Usuário e Admin
+  if (authRole === 'none') {
+    return (
+      <div className={isDarkMode ? 'dark' : ''}>
+        <LoginGate
+          securityConfig={securityConfig}
+          onLoginSuccess={(role) => {
+            setAuthRole(role);
+            localStorage.setItem('marsil_auth_role', role);
+            if (role === 'admin') {
+              setActiveTab('admin');
+            } else {
+              setActiveTab('user');
+            }
+          }}
+          isDarkMode={isDarkMode}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
@@ -292,6 +329,7 @@ export default function App() {
               vendedores={vendedores}
               whatsappConfig={whatsappConfig}
               catalogMeta={catalogMeta}
+              securityConfig={securityConfig}
               onUpdateRequestStatus={handleUpdateRequestStatus}
               onUpdateOrderGroupStatus={handleUpdateOrderStatus}
               onDeleteRequest={handleDeleteRequest}
@@ -300,6 +338,7 @@ export default function App() {
               onAddVendedor={handleAddVendedor}
               onRemoveVendedor={handleRemoveVendedor}
               onUpdateWhatsApp={handleUpdateWhatsApp}
+              onUpdateSecurityConfig={handleUpdateSecurityConfig}
               onBatchUploaded={handleBatchUploaded}
             />
           ) : (
@@ -362,7 +401,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Digite a senha administrativa para gerenciar a carga em lote e aprovar pedidos. (Senha padrão: <strong>123</strong>)
+              Digite a senha administrativa para gerenciar a carga em lote e aprovar pedidos.
             </p>
 
             <form onSubmit={handleLoginSubmit} className="space-y-3">
@@ -371,7 +410,7 @@ export default function App() {
                   type="password"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Senha..."
+                  placeholder="Senha de administrador..."
                   autoFocus
                   required
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"

@@ -26,6 +26,12 @@ export interface WhatsAppConfig {
   mensagemPadrao?: string;
 }
 
+export interface SecurityConfig {
+  adminPassword: string;
+  userPassword: string;
+  updatedAt?: string;
+}
+
 export interface StockRequest {
   id: string;
   pedidoId?: string; // Identificador agrupador do pedido (ex: PED-4921)

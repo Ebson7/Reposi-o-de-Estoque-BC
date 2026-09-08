@@ -14,7 +14,7 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { StockRequest, WhatsAppConfig, CatalogMeta, CreateOrderPayload, Product, UnitType, RequestType, RequestStatus } from './types';
+import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, CreateOrderPayload, Product, UnitType, RequestType, RequestStatus } from './types';
 
 export const DEFAULT_VENDEDORES = [
   "ADALTON LUIZ",
@@ -51,6 +51,11 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsAppConfig = {
   enabled: true,
   phoneNumber: "5511999999999",
   mensagemPadrao: "Olá, segue nova solicitação de estoque para a Marsil Boracéia."
+};
+
+export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
+  adminPassword: "@adminmarsil2026",
+  userPassword: "@marsil2026"
 };
 
 export const DEFAULT_CATALOG_META: CatalogMeta = {
@@ -416,6 +421,88 @@ export const firebaseService = {
   async updateCatalogMeta(meta: Partial<CatalogMeta>): Promise<void> {
     const docRef = doc(db, 'config', 'catalogMeta');
     await setDoc(docRef, meta, { merge: true });
+  },
+
+  /**
+   * Assina em tempo real as configurações de senhas (Usuário & Administrador)
+   */
+  subscribeToSecurityConfig(callback: (cfg: SecurityConfig) => void): Unsubscribe {
+    const docRef = doc(db, 'config', 'security');
+
+    return onSnapshot(docRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const adminPass = (data.adminPassword && data.adminPassword !== '123') 
+          ? data.adminPassword 
+          : DEFAULT_SECURITY_CONFIG.adminPassword;
+        const userPass = (data.userPassword && data.userPassword !== '1234') 
+          ? data.userPassword 
+          : DEFAULT_SECURITY_CONFIG.userPassword;
+
+        // Se no Firestore ainda estiver gravado os padrões antigos '123' ou '1234', atualiza no banco
+        if (data.adminPassword === '123' || data.userPassword === '1234') {
+          try {
+            await setDoc(docRef, { adminPassword: adminPass, userPassword: userPass, updatedAt: new Date().toISOString() }, { merge: true });
+          } catch {}
+        }
+
+        callback({
+          adminPassword: adminPass,
+          userPassword: userPass,
+          updatedAt: data.updatedAt
+        });
+      } else {
+        try {
+          await setDoc(docRef, DEFAULT_SECURITY_CONFIG, { merge: true });
+        } catch {}
+        callback(DEFAULT_SECURITY_CONFIG);
+      }
+    }, (error) => {
+      console.error('[Firebase] Erro ao escutar senhas no Firestore:', error);
+      callback(DEFAULT_SECURITY_CONFIG);
+    });
+  },
+
+  async updateSecurityConfig(cfg: Partial<SecurityConfig>): Promise<SecurityConfig> {
+    const docRef = doc(db, 'config', 'security');
+    const updateData = {
+      ...cfg,
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(docRef, sanitizeForFirestore(updateData), { merge: true });
+    const snap = await getDoc(docRef);
+    const data = snap.exists() ? snap.data() : {};
+    return {
+      adminPassword: data.adminPassword || DEFAULT_SECURITY_CONFIG.adminPassword,
+      userPassword: data.userPassword || DEFAULT_SECURITY_CONFIG.userPassword,
+      updatedAt: data.updatedAt
+    };
+  },
+
+  async getSecurityConfig(): Promise<SecurityConfig> {
+    try {
+      const docRef = doc(db, 'config', 'security');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const adminPass = (data.adminPassword && data.adminPassword !== '123') 
+          ? data.adminPassword 
+          : DEFAULT_SECURITY_CONFIG.adminPassword;
+        const userPass = (data.userPassword && data.userPassword !== '1234') 
+          ? data.userPassword 
+          : DEFAULT_SECURITY_CONFIG.userPassword;
+        return {
+          adminPassword: adminPass,
+          userPassword: userPass,
+          updatedAt: data.updatedAt
+        };
+      } else {
+        try {
+          await setDoc(docRef, DEFAULT_SECURITY_CONFIG, { merge: true });
+        } catch {}
+      }
+    } catch {}
+    return DEFAULT_SECURITY_CONFIG;
   },
 
   // ========================================================

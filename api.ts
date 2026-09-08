@@ -1,5 +1,5 @@
-import { Product, StockRequest, WhatsAppConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, RequestStatus } from './types';
-import { firebaseService, DEFAULT_WHATSAPP_CONFIG, DEFAULT_CATALOG_META, DEFAULT_VENDEDORES } from './firebaseService';
+import { Product, StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, RequestStatus } from './types';
+import { firebaseService, DEFAULT_WHATSAPP_CONFIG, DEFAULT_CATALOG_META, DEFAULT_VENDEDORES, DEFAULT_SECURITY_CONFIG } from './firebaseService';
 import { parseCatalogBatch } from './catalogParser';
 import { localCatalogService } from './localCatalogService';
 
@@ -396,5 +396,13 @@ export const api = {
     }).catch(() => {});
 
     return updated;
+  },
+
+  async getSecurityConfig(): Promise<SecurityConfig> {
+    return await firebaseService.getSecurityConfig();
+  },
+
+  async updateSecurityConfig(config: Partial<SecurityConfig>): Promise<SecurityConfig> {
+    return await firebaseService.updateSecurityConfig(config);
   }
 };
