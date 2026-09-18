@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Package, KeyRound, ShieldCheck, User, Eye, EyeOff, Lock, ArrowRight, AlertCircle, MessageCircle, ExternalLink, RefreshCw, Check } from 'lucide-react';
 import { SecurityConfig, WhatsAppConfig, AdminAuthChallenge } from '../types';
 import { api } from '../api';
+import { PWAInstallButton } from './PWAInstallButton';
+import { PWAInstallModal } from './PWAInstallModal';
 
 interface LoginGateProps {
   securityConfig: SecurityConfig;
@@ -409,10 +411,18 @@ _Se você autoriza este acesso, informe o código acima ao solicitante para libe
 
       </div>
 
+      {/* Botão de Instalar App no Login */}
+      <div className="mt-4 flex justify-center">
+        <PWAInstallButton variant="pill" />
+      </div>
+
       {/* Footer info */}
-      <div className="mt-8 text-center text-xs text-slate-500 dark:text-slate-400">
+      <div className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
         <p>Marsil & Boracéia • Distribuição de Alimentos</p>
       </div>
+
+      {/* Pop-up de Instalação PWA */}
+      <PWAInstallModal autoPromptDelay={2000} />
 
     </div>
   );

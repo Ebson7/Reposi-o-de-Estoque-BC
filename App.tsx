@@ -9,6 +9,7 @@ import { LoginGate } from './components/LoginGate';
 import { HelpModal } from './components/HelpModal';
 import { PhoneEmulatorShell } from './components/PhoneEmulatorShell';
 import { AdminWhatsAppAuthModal } from './components/AdminWhatsAppAuthModal';
+import { PWAInstallModal } from './components/PWAInstallModal';
 import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, CreateOrderPayload } from './types';
 import { api } from './api';
 import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
@@ -449,6 +450,9 @@ export default function App() {
           onClose={() => setIsHelpOpen(false)}
           isAdmin={authRole === 'admin'}
         />
+
+        {/* Pop-up de Instalar Aplicativo (PWA) */}
+        <PWAInstallModal autoPromptDelay={2500} />
 
         {/* Footer */}
         <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-slate-400 border-t border-slate-200 dark:border-slate-800 mt-auto">

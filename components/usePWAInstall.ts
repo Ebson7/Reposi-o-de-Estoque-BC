@@ -64,11 +64,22 @@ export function usePWAInstall() {
     }
   };
 
+  const openInstallModal = () => {
+    window.dispatchEvent(new CustomEvent('marsil_open_pwa_install'));
+  };
+
   return {
     isInstallable: !!deferredPrompt,
     isInstalled,
     isStandalone,
     isIOS,
     install,
+    openInstallModal,
   };
+}
+
+export function triggerPWAInstallModal() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('marsil_open_pwa_install'));
+  }
 }

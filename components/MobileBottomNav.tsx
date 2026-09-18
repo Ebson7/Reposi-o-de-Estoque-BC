@@ -21,8 +21,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenHelp,
   onOpenCart,
 }) => {
-  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const { isInstalled, isStandalone, openInstallModal } = usePWAInstall();
   const [cartCount, setCartCount] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('marsil_order_cart_items');
@@ -66,11 +65,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   };
 
   const handleInstallClick = () => {
-    if (isInstallable) {
-      install();
-    } else if (isIOS) {
-      setShowIOSGuide(true);
-    }
+    openInstallModal();
   };
 
   return (
@@ -152,14 +147,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           )}
 
           {/* Botão de Instalar PWA / Status */}
-          {!isInstalled && (isInstallable || isIOS) ? (
+          {!isInstalled && !isStandalone ? (
             <button
               type="button"
               onClick={handleInstallClick}
-              className="flex flex-col items-center justify-center flex-1 py-1 text-blue-600 dark:text-blue-400 font-bold transition-all active:scale-95"
+              className="flex flex-col items-center justify-center flex-1 py-1 text-blue-600 dark:text-blue-400 font-bold transition-all active:scale-95 cursor-pointer"
               title="Instalar App no Smartphone"
             >
-              <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm">
+              <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm animate-pulse">
                 <Download className="w-3.5 h-3.5" />
               </div>
               <span className="text-[10px] mt-0.5">Instalar</span>
@@ -198,35 +193,6 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
         </div>
       </nav>
-
-      {/* Modal Passo a Passo para iOS Safari */}
-      {showIOSGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                <Smartphone className="w-5 h-5" />
-              </div>
-              <h3 className="font-extrabold text-base text-slate-900 dark:text-white">Instalar no iPhone / iPad</h3>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              Para usar como aplicativo em tela cheia no iOS:
-            </p>
-            <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl text-xs text-slate-700 dark:text-slate-300">
-              <p><strong>1.</strong> Toque no botão de <strong>Compartilhar</strong> (ícone do quadrado com seta para cima) na barra inferior do Safari.</p>
-              <p><strong>2.</strong> Role para baixo e selecione <strong>"Adicionar à Tela de Início"</strong>.</p>
-              <p><strong>3.</strong> Toque em <strong>"Adicionar"</strong> no topo direito.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowIOSGuide(false)}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 };
