@@ -153,7 +153,6 @@ ${req.isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${req.observ
   // Build WhatsApp text for an entire grouped order
   const buildGroupWhatsAppText = (group: OrderGroup): string => {
     let msg = `*SOLICITAÇÃO DE TRANSFERÊNCIA DE ESTOQUE - BORACÉIA*\n`;
-    msg += `📋 *Pedido:* #${group.pedidoNumero}\n`;
     msg += `👤 *Solicitante:* ${group.solicitante}\n`;
     msg += `🎯 *Tipo Principal:* ${group.tipoGeral || 'Aposta na Venda'}\n`;
     msg += `📅 *Data:* ${new Date(group.dataSolicitacao).toLocaleString('pt-BR')}\n`;

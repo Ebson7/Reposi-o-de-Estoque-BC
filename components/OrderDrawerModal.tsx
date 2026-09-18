@@ -96,10 +96,9 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
   };
 
   // Build formatted WhatsApp message
-  const buildWhatsAppMessage = (orderNum: string): string => {
+  const buildWhatsAppMessage = (): string => {
     const nowStr = new Date().toLocaleString('pt-BR');
     let msg = `*SOLICITAÇÃO DE TRANSFERÊNCIA DE ESTOQUE - BORACÉIA*\n`;
-    msg += `📋 *Pedido:* #${orderNum}\n`;
     msg += `👤 *Solicitante:* ${solicitante}\n`;
     msg += `🎯 *Tipo Principal:* ${tipoGeral}\n`;
     msg += `📅 *Data/Hora:* ${nowStr}\n`;
@@ -144,7 +143,7 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
     setIsSubmitting(true);
     try {
       const generatedOrderNum = `PED-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
-      const messageText = buildWhatsAppMessage(generatedOrderNum);
+      const messageText = buildWhatsAppMessage();
 
       const payload: CreateOrderPayload = {
         pedidoNumero: generatedOrderNum,

@@ -484,7 +484,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     const statusText = group.status === 'Aprovado' ? '✅ APROVADO' : group.status === 'Recusado' ? '❌ NÃO APROVADO' : '📋 ' + group.status.toUpperCase();
     let msg = `*RETORNO DE PEDIDO DE ESTOQUE - BORACÉIA*\n`;
     msg += `Olá *${group.solicitante}*,\n`;
-    msg += `Seu pedido *#${group.pedidoNumero}* está: *${statusText}*\n\n`;
+    msg += `Seu pedido está: *${statusText}*\n\n`;
     msg += `*Itens (${group.items.length} produtos / ${group.totalVolumes} volumes):*\n`;
     group.items.forEach((it, idx) => {
       msg += `${idx + 1}) [${it.productCode}] ${it.productName} (${it.quantidade} ${it.unidade}) - Status: ${it.status}\n`;
