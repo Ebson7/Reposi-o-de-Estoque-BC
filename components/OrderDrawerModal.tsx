@@ -20,6 +20,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { OrderItem, UnitType, RequestType, WhatsAppConfig, CreateOrderPayload, StockRequest } from '../types';
+import { Tooltip } from './Tooltip';
 
 interface OrderDrawerModalProps {
   isOpen: boolean;
@@ -62,7 +63,7 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
   onSubmitOrder,
   onViewRequests
 }) => {
-  const [solicitante, setSolicitante] = useState(activeVendor || (vendedores[0] || 'ADALTON LUIZ'));
+  const [solicitante, setSolicitante] = useState(activeVendor || '');
   const [tipoGeral, setTipoGeral] = useState<RequestType>('Aposta na Venda');
   const [observacoesGerais, setObservacoesGerais] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,9 +76,7 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
 
   // Sync solicitante when activeVendor changes
   React.useEffect(() => {
-    if (activeVendor) {
-      setSolicitante(activeVendor);
-    }
+    setSolicitante(activeVendor || '');
   }, [activeVendor]);
 
   // Totals calculation
@@ -312,18 +311,24 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
                 {/* Vendedor */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center space-x-1">
-                    <User className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Vendedor / Solicitante *</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <User className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Vendedor / Solicitante *</span>
+                    </label>
+                    <Tooltip content="O nome selecionado identifica quem gerou a solicitação na mensagem do WhatsApp e no histórico." iconOnly />
+                  </div>
                   <select
                     value={solicitante}
                     onChange={(e) => {
                       setSolicitante(e.target.value);
                       onSelectVendor(e.target.value);
                     }}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-3 py-2 bg-white dark:bg-slate-800 border rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+                      !solicitante ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400' : 'border-slate-200 dark:border-slate-700'
+                    }`}
                   >
+                    <option value="">Selecione seu usuário/vendedor...</option>
                     {vendedores.map((v) => (
                       <option key={v} value={v}>{v}</option>
                     ))}
@@ -332,10 +337,13 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
 
                 {/* Tipo Geral */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center space-x-1">
-                    <Layers className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Tipo do Pedido</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                      <Layers className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Tipo do Pedido</span>
+                    </label>
+                    <Tooltip content="Aposta na Venda: Reposição para estoque de giro. Venda Garantida: Pedido confirmado com cliente." iconOnly />
+                  </div>
                   <div className="flex rounded-xl bg-slate-200 dark:bg-slate-700 p-0.5">
                     <button
                       type="button"

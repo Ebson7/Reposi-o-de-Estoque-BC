@@ -6,6 +6,8 @@ import { RequestsHistory } from './components/RequestsHistory';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { LoginGate } from './components/LoginGate';
+import { HelpModal } from './components/HelpModal';
+import { PhoneEmulatorShell } from './components/PhoneEmulatorShell';
 import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, CreateOrderPayload } from './types';
 import { api } from './api';
 import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
@@ -54,6 +56,23 @@ export default function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  // Help Modal
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Phone Emulation (Mobile simulator) mode on desktop
+  const [isPhoneEmulating, setIsPhoneEmulating] = useState<boolean>(() => {
+    const saved = localStorage.getItem('marsil_phone_emulating');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleTogglePhoneEmulating = () => {
+    setIsPhoneEmulating(prev => {
+      const next = !prev;
+      localStorage.setItem('marsil_phone_emulating', String(next));
+      return next;
+    });
+  };
 
   // Dark mode effect
   useEffect(() => {
@@ -275,30 +294,38 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
-      
-      {/* Executive Header */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        authRole={authRole}
-        onOpenLogin={() => {
-          setLoginError('');
-          setPasswordInput('');
-          setShowLoginModal(true);
-        }}
-        onLogout={handleLogout}
-        isDarkMode={isDarkMode}
-        setIsDarkMode={setIsDarkMode}
-        catalogMeta={catalogMeta}
-        isRealtimeConnected={isRealtimeConnected}
-        pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
-        onManualRefresh={loadInitialData}
-        isRefreshing={isRefreshing}
-      />
+    <PhoneEmulatorShell
+      isEmulating={isPhoneEmulating}
+      onToggleEmulating={handleTogglePhoneEmulating}
+      isDarkMode={isDarkMode}
+    >
+      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
+        
+        {/* Executive Header */}
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          authRole={authRole}
+          onOpenLogin={() => {
+            setLoginError('');
+            setPasswordInput('');
+            setShowLoginModal(true);
+          }}
+          onLogout={handleLogout}
+          isDarkMode={isDarkMode}
+          setIsDarkMode={setIsDarkMode}
+          catalogMeta={catalogMeta}
+          isRealtimeConnected={isRealtimeConnected}
+          pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
+          onManualRefresh={loadInitialData}
+          isRefreshing={isRefreshing}
+          onOpenHelp={() => setIsHelpOpen(true)}
+          isPhoneEmulating={isPhoneEmulating}
+          onTogglePhoneEmulating={handleTogglePhoneEmulating}
+        />
 
-      {/* Main Content Area */}
-      <main className={`max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 ${authRole === 'admin' ? 'pb-28 sm:pb-8' : 'pb-10 sm:pb-8'}`}>
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 sm:pb-24">
         
         {/* TAB 1: CONSULTA DE ESTOQUE (USUÁRIO / VENDEDOR) */}
         {activeTab === 'user' && (
@@ -312,6 +339,7 @@ export default function App() {
             activeVendor={activeVendor}
             onSelectVendor={handleSelectVendor}
             lastUpdated={catalogMeta.lastUpdated}
+            onOpenHelp={() => setIsHelpOpen(true)}
           />
         )}
 
@@ -398,78 +426,87 @@ export default function App() {
 
       </main>
 
-      {/* Barra de Navegação Inferior para Smartphones */}
-      <MobileBottomNav
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        authRole={authRole}
-        onOpenLogin={() => {
-          setLoginError('');
-          setPasswordInput('');
-          setShowLoginModal(true);
-        }}
-        pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
-      />
+        {/* Barra de Navegação Inferior para Smartphones */}
+        <MobileBottomNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          authRole={authRole}
+          onOpenLogin={() => {
+            setLoginError('');
+            setPasswordInput('');
+            setShowLoginModal(true);
+          }}
+          pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
+          onOpenHelp={() => setIsHelpOpen(true)}
+        />
 
-      {/* Indicador de Status Offline / Reconexão */}
-      <OfflineIndicator />
+        {/* Indicador de Status Offline / Reconexão */}
+        <OfflineIndicator />
 
-      {/* Admin Login Modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                  <KeyRound className="w-4 h-4" />
+        {/* Admin Login Modal */}
+        {showLoginModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">Acesso Admin</h3>
                 </div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">Acesso Admin</h3>
+                <button
+                  onClick={() => setShowLoginModal(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => setShowLoginModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
+
+              <p className="text-xs text-slate-500">
+                Digite a senha administrativa para gerenciar a carga em lote e aprovar pedidos.
+              </p>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-3">
+                <div>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Senha de administrador..."
+                    autoFocus
+                    required
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {loginError && (
+                  <div className="text-xs text-rose-600 font-bold">{loginError}</div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
+                >
+                  Autenticar e Entrar
+                </button>
+              </form>
             </div>
-
-            <p className="text-xs text-slate-500">
-              Digite a senha administrativa para gerenciar a carga em lote e aprovar pedidos.
-            </p>
-
-            <form onSubmit={handleLoginSubmit} className="space-y-3">
-              <div>
-                <input
-                  type="password"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Senha de administrador..."
-                  autoFocus
-                  required
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {loginError && (
-                <div className="text-xs text-rose-600 font-bold">{loginError}</div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
-              >
-                Autenticar e Entrar
-              </button>
-            </form>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-slate-400 border-t border-slate-200 dark:border-slate-800 mt-12">
-        <p>Sistema de Gestão de Estoque Marsil & Boracéia • Arquitetura de Alta Performance com Sincronização em Tempo Real</p>
-      </footer>
+        {/* Help / Guide Modal */}
+        <HelpModal
+          isOpen={isHelpOpen}
+          onClose={() => setIsHelpOpen(false)}
+          isAdmin={authRole === 'admin'}
+        />
 
-    </div>
+        {/* Footer */}
+        <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-slate-400 border-t border-slate-200 dark:border-slate-800 mt-auto">
+          <p>Sistema de Gestão de Estoque Marsil & Boracéia • Arquitetura PWA Mobile de Alta Performance</p>
+        </footer>
+
+      </div>
+    </PhoneEmulatorShell>
   );
 }

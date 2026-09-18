@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, Search, ShieldCheck, Sun, Moon, LogOut, KeyRound, Radio, Clock, ShoppingCart, RefreshCw, User } from 'lucide-react';
+import { Package, Search, ShieldCheck, Sun, Moon, LogOut, KeyRound, Radio, Clock, ShoppingCart, RefreshCw, User, HelpCircle, Smartphone, Monitor } from 'lucide-react';
 import { CatalogMeta } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -16,6 +16,9 @@ interface HeaderProps {
   pendingRequestsCount: number;
   onManualRefresh: () => void;
   isRefreshing: boolean;
+  onOpenHelp?: () => void;
+  isPhoneEmulating?: boolean;
+  onTogglePhoneEmulating?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,7 +33,10 @@ export const Header: React.FC<HeaderProps> = ({
   isRealtimeConnected,
   pendingRequestsCount,
   onManualRefresh,
-  isRefreshing
+  isRefreshing,
+  onOpenHelp,
+  isPhoneEmulating,
+  onTogglePhoneEmulating
 }) => {
   const formatTimeAgo = (isoString?: string) => {
     if (!isoString) return 'Desconhecido';
@@ -157,6 +163,39 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-blue-600' : ''}`} />
             </button>
+
+            {/* Como Usar / Ajuda */}
+            {onOpenHelp && (
+              <button
+                onClick={onOpenHelp}
+                title="Como Usar / Guia de Operação e Dicas"
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-900/60 transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span className="hidden sm:inline">Como Usar</span>
+              </button>
+            )}
+
+            {/* Botão de Alternar Modo Celular / Desktop (Exibido apenas em telas maiores) */}
+            {onTogglePhoneEmulating && (
+              <button
+                onClick={onTogglePhoneEmulating}
+                title={isPhoneEmulating ? "Alternar para Modo Tela Cheia (Desktop)" : "Alternar para Modo Celular (Simulador PWA)"}
+                className="hidden md:flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+              >
+                {isPhoneEmulating ? (
+                  <>
+                    <Monitor className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Expandir</span>
+                  </>
+                ) : (
+                  <>
+                    <Smartphone className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Modo Celular</span>
+                  </>
+                )}
+              </button>
+            )}
 
             {/* Theme Toggle */}
             <button

@@ -28,12 +28,14 @@ import {
   Plus,
   Minus,
   CheckSquare,
-  Square
+  Square,
+  HelpCircle
 } from 'lucide-react';
 import { Product, StockRequest, WhatsAppConfig, RequestType, UnitType, PaginatedProductsResponse, OrderItem, CreateOrderPayload } from '../types';
 import { api } from '../api';
 import { parseSearchQueryWithGemini } from './geminiService';
 import { OrderDrawerModal } from './OrderDrawerModal';
+import { Tooltip } from './Tooltip';
 
 interface UserPortalProps {
   requests: StockRequest[];
@@ -45,6 +47,7 @@ interface UserPortalProps {
   onSelectVendor: (vendor: string) => void;
   lastUpdated?: string;
   onViewRequests?: () => void;
+  onOpenHelp?: () => void;
 }
 
 const UNIT_OPTIONS: UnitType[] = ['CX', 'UN', 'DP', 'PCT', 'PT', 'SC', 'FD'];
@@ -68,7 +71,8 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   activeVendor,
   onSelectVendor,
   lastUpdated,
-  onViewRequests
+  onViewRequests,
+  onOpenHelp
 }) => {
   // Search parameters
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,12 +103,20 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   });
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
 
-  // Sync cart to local storage
+  // Sync cart to local storage and dispatch event
   useEffect(() => {
     try {
       localStorage.setItem('marsil_order_cart_items', JSON.stringify(orderItems));
+      window.dispatchEvent(new CustomEvent('marsil_cart_updated', { detail: orderItems.length }));
     } catch {}
   }, [orderItems]);
+
+  // Listen for open drawer event from mobile navigation bar
+  useEffect(() => {
+    const handleOpen = () => setIsOrderDrawerOpen(true);
+    window.addEventListener('marsil_open_order_drawer', handleOpen);
+    return () => window.removeEventListener('marsil_open_order_drawer', handleOpen);
+  }, []);
 
   // Order item helpers
   const isItemInOrder = useCallback((productId: string) => {
@@ -232,7 +244,7 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   const [quantidade, setQuantidade] = useState<number>(1);
   const [unidade, setUnidade] = useState<UnitType>('CX');
   const [tipo, setTipo] = useState<RequestType>('Aposta na Venda');
-  const [solicitante, setSolicitante] = useState(activeVendor || (vendedores[0] || 'ADALTON LUIZ'));
+  const [solicitante, setSolicitante] = useState(activeVendor || '');
   const [observacoes, setObservacoes] = useState('');
   const [isValidadeCurta, setIsValidadeCurta] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -241,14 +253,8 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
   // Keep solicitante synced with activeVendor
   useEffect(() => {
-    if (activeVendor) {
-      setSolicitante(activeVendor);
-    } else if (vendedores.length > 0 && !solicitante) {
-      const initial = vendedores[0];
-      setSolicitante(initial);
-      onSelectVendor(initial);
-    }
-  }, [activeVendor, vendedores]);
+    setSolicitante(activeVendor || '');
+  }, [activeVendor]);
 
   // Execute Search Function
   const runSearch = useCallback(async (pageToLoad = 1) => {
@@ -334,7 +340,11 @@ export const UserPortal: React.FC<UserPortalProps> = ({
   // Submit Request
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProduct || quantidade <= 0 || !solicitante) return;
+    if (!selectedProduct || quantidade <= 0) return;
+    if (!solicitante) {
+      alert("Por favor, selecione seu usuário/vendedor antes de enviar a solicitação.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -400,6 +410,10 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Identificação do Usuário / Vendedor
               </span>
+              <Tooltip 
+                content="Seu nome será vinculado a todos os pedidos e incluído automaticamente na mensagem do WhatsApp para a expedição."
+                iconOnly
+              />
               {solicitante && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                   Ativo
@@ -415,9 +429,11 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                   setSolicitante(val);
                   onSelectVendor(val);
                 }}
-                className="w-full sm:w-auto min-w-[240px] px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all"
+                className={`w-full sm:w-auto min-w-[260px] px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all ${
+                  !solicitante ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-300/40 text-amber-900 dark:text-amber-300 bg-amber-50/60 dark:bg-amber-950/20' : 'border-slate-300 dark:border-slate-700'
+                }`}
               >
-                <option value="" disabled>Selecione seu usuário/vendedor...</option>
+                <option value="">Selecione seu usuário/vendedor...</option>
                 {vendedores.map(v => (
                   <option key={v} value={v}>
                     {v}
@@ -433,27 +449,41 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
           </div>
         </div>
 
-        {/* Resumo do Pedido Atual (Carrinho) */}
-        <div className="flex items-center justify-between md:justify-end gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsOrderDrawerOpen(true)}
-            className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm ${
-              orderItems.length > 0
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 ring-2 ring-blue-400/30'
-                : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Meu Pedido</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
-              orderItems.length > 0 
-                ? 'bg-white text-blue-700' 
-                : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-            }`}>
-              {orderItems.length} {orderItems.length === 1 ? 'item' : 'itens'} ({totalVolumesInOrder} vol)
-            </span>
-          </button>
+        {/* Resumo do Pedido Atual (Carrinho) e Ajuda */}
+        <div className="flex items-center justify-between md:justify-end gap-2.5 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800 shrink-0">
+          {onOpenHelp && (
+            <button
+              type="button"
+              onClick={onOpenHelp}
+              className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors shadow-sm"
+              title="Ver Guia de Uso Passo a Passo"
+            >
+              <HelpCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Como Usar</span>
+            </button>
+          )}
+
+          <Tooltip content="Clique para revisar itens, ajustar quantidades e gerar o texto formatado para o WhatsApp.">
+            <button
+              type="button"
+              onClick={() => setIsOrderDrawerOpen(true)}
+              className={`flex items-center space-x-2.5 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm ${
+                orderItems.length > 0
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 ring-2 ring-blue-400/30'
+                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>Meu Pedido</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                orderItems.length > 0 
+                  ? 'bg-white text-blue-700' 
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              }`}>
+                {orderItems.length} {orderItems.length === 1 ? 'item' : 'itens'} ({totalVolumesInOrder} vol)
+              </span>
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -534,49 +564,57 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
               Todos ({queryResult.total})
             </button>
 
-            <button
-              onClick={() => setSelectedEstoque('marsil')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                selectedEstoque === 'marsil'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100'
-              }`}
-            >
-              Com Estoque Marsil
-            </button>
+            <Tooltip content="Ver itens com saldo disponível no CD Principal (Marsil) prontos para transferência.">
+              <button
+                onClick={() => setSelectedEstoque('marsil')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedEstoque === 'marsil'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100'
+                }`}
+              >
+                Com Estoque Marsil
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => setSelectedEstoque('boraceia')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                selectedEstoque === 'boraceia'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
-              }`}
-            >
-              Com Estoque Boracéia
-            </button>
+            <Tooltip content="Ver itens com saldo físico na filial Boracéia (pronta entrega imediata).">
+              <button
+                onClick={() => setSelectedEstoque('boraceia')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedEstoque === 'boraceia'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'
+                }`}
+              >
+                Com Estoque Boracéia
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => setSelectedEstoque('ambos')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                selectedEstoque === 'ambos'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-              }`}
-            >
-              Disponível em Ambos
-            </button>
+            <Tooltip content="Ver itens com saldo simultâneo em Marsil e na filial Boracéia.">
+              <button
+                onClick={() => setSelectedEstoque('ambos')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedEstoque === 'ambos'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                }`}
+              >
+                Disponível em Ambos
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => setSelectedEstoque('zerado')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                selectedEstoque === 'zerado'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
-              }`}
-            >
-              Zerados
-            </button>
+            <Tooltip content="Produtos zerados em ambos os depósitos.">
+              <button
+                onClick={() => setSelectedEstoque('zerado')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedEstoque === 'zerado'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                }`}
+              >
+                Zerados
+              </button>
+            </Tooltip>
           </div>
 
           {/* View mode toggle & Cart button */}
@@ -599,18 +637,19 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
             </div>
 
             {/* Pedido Atual Quick Button */}
-            <button
-              onClick={() => setIsOrderDrawerOpen(true)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                orderItems.length > 0
-                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-              title="Abrir detalhes do pedido consolidado"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Pedido ({orderItems.length})</span>
-            </button>
+            <Tooltip content="Abrir resumo do pedido consolidado (carrinho)">
+              <button
+                onClick={() => setIsOrderDrawerOpen(true)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  orderItems.length > 0
+                    ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Pedido ({orderItems.length})</span>
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -633,7 +672,13 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Filtrar por Situação</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Filtrar por Situação</label>
+              <Tooltip 
+                content="NO = Normal | DV = Validade Curta / Devolução | PR = Promoção | FT = Falta Temporária | FL = Fora de Linha"
+                iconOnly
+              />
+            </div>
             <select
               value={selectedSituacao}
               onChange={(e) => setSelectedSituacao(e.target.value)}
@@ -795,25 +840,29 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
 
                   {/* Stock Comparison Grid */}
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
-                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
-                      <span className="block text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                        Estoque Marsil
-                      </span>
-                      <span className={`text-lg sm:text-xl font-black ${marsilZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                        {prod.estoqueMarsil.toLocaleString('pt-BR')}
-                      </span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
-                    </div>
+                    <Tooltip content="Saldo disponível no Centro de Distribuição Principal Marsil (pronto para transferência)">
+                      <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 cursor-help">
+                        <span className="block text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                          Estoque Marsil
+                        </span>
+                        <span className={`text-lg sm:text-xl font-black ${marsilZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                          {prod.estoqueMarsil.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
+                      </div>
+                    </Tooltip>
 
-                    <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
-                      <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                        Estoque Boracéia
-                      </span>
-                      <span className={`text-lg sm:text-xl font-black ${boraceiaZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                        {prod.estoqueBoraceia.toLocaleString('pt-BR')}
-                      </span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
-                    </div>
+                    <Tooltip content="Saldo físico no depósito da filial Boracéia (pronta entrega)">
+                      <div className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 cursor-help">
+                        <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                          Estoque Boracéia
+                        </span>
+                        <span className={`text-lg sm:text-xl font-black ${boraceiaZero ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                          {prod.estoqueBoraceia.toLocaleString('pt-BR')}
+                        </span>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">{prod.embalagem || 'UN'}</span>
+                      </div>
+                    </Tooltip>
                   </div>
 
                   {/* Stock Difference Indicator */}
@@ -932,9 +981,22 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                   <th className="py-3 px-4">Código</th>
                   <th className="py-3 px-4">Produto / Sabor</th>
                   <th className="py-3 px-4">Fornecedor</th>
-                  <th className="py-3 px-4">Situação</th>
-                  <th className="py-3 px-4 text-center">Marsil</th>
-                  <th className="py-3 px-4 text-center">Boracéia</th>
+                  <th className="py-3 px-4">
+                    <div className="flex items-center space-x-1">
+                      <span>Situação</span>
+                      <Tooltip content="NO: Normal | DV: Validade Curta | PR: Promoção | FT: Falta" iconOnly />
+                    </div>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <Tooltip content="Saldo no Centro de Distribuição Principal Marsil">
+                      <span className="cursor-help text-blue-600 dark:text-blue-400">Marsil</span>
+                    </Tooltip>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <Tooltip content="Saldo na filial Boracéia (pronta entrega)">
+                      <span className="cursor-help text-emerald-600 dark:text-emerald-400">Boracéia</span>
+                    </Tooltip>
+                  </th>
                   <th className="py-3 px-4 text-right">Ação</th>
                 </tr>
               </thead>
@@ -1119,8 +1181,11 @@ ${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? 
                     onSelectVendor(val);
                   }}
                   required
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+                    !solicitante ? 'border-amber-400 dark:border-amber-500 ring-1 ring-amber-400' : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 >
+                  <option value="">Selecione seu usuário/vendedor...</option>
                   {vendedores.map(v => (
                     <option key={v} value={v}>{v}</option>
                   ))}
