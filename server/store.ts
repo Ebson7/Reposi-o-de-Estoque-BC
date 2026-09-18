@@ -204,7 +204,7 @@ class CentralStore {
   private vendedores: string[] = [];
   private whatsappConfig: WhatsAppConfig = {
     enabled: true,
-    phoneNumber: "5511999999999",
+    phoneNumber: "5511986946245",
     mensagemPadrao: "Olá, segue solicitação de transferência de estoque para Boracéia:"
   };
   private catalogMeta: CatalogMeta = {

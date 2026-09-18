@@ -30,6 +30,16 @@ export interface SecurityConfig {
   adminPassword: string;
   userPassword: string;
   updatedAt?: string;
+  adminWhatsAppPhone?: string;
+  requireWhatsAppOtpForAdmin?: boolean;
+}
+
+export interface AdminAuthChallenge {
+  requestId: string;
+  code: string;
+  createdAt: string;
+  expiresAt: number;
+  status: 'pending' | 'approved' | 'expired';
 }
 
 export interface StockRequest {

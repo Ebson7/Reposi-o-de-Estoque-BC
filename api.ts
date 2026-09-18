@@ -1,4 +1,4 @@
-import { Product, StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, RequestStatus } from './types';
+import { Product, StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, RequestStatus, AdminAuthChallenge } from './types';
 import { firebaseService, DEFAULT_WHATSAPP_CONFIG, DEFAULT_CATALOG_META, DEFAULT_VENDEDORES, DEFAULT_SECURITY_CONFIG } from './firebaseService';
 import { parseCatalogBatch } from './catalogParser';
 import { localCatalogService } from './localCatalogService';
@@ -404,5 +404,13 @@ export const api = {
 
   async updateSecurityConfig(config: Partial<SecurityConfig>): Promise<SecurityConfig> {
     return await firebaseService.updateSecurityConfig(config);
+  },
+
+  async createAdminAuthChallenge(): Promise<AdminAuthChallenge> {
+    return await firebaseService.createAdminAuthChallenge();
+  },
+
+  async verifyAdminAuthCode(requestId: string, inputCode: string, fallbackCode?: string): Promise<boolean> {
+    return await firebaseService.verifyAdminAuthCode(requestId, inputCode, fallbackCode);
   }
 };

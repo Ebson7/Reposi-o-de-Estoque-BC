@@ -29,7 +29,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Copy
+  Copy,
+  Smartphone
 } from 'lucide-react';
 import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta } from '../types';
 import { api } from '../api';
@@ -100,9 +101,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isSavingWa, setIsSavingWa] = useState(false);
   const [waSavedSuccess, setWaSavedSuccess] = useState(false);
 
-  // Senhas de Acesso (Segurança)
+  // Senhas de Acesso e Aprovação 2FA (Segurança)
   const [adminPass, setAdminPass] = useState(securityConfig.adminPassword || '@adminmarsil2026');
   const [userPass, setUserPass] = useState(securityConfig.userPassword || '@marsil2026');
+  const [adminWaPhone, setAdminWaPhone] = useState(securityConfig.adminWhatsAppPhone || whatsappConfig.phoneNumber || '5511986946245');
   const [showAdminPass, setShowAdminPass] = useState(false);
   const [showUserPass, setShowUserPass] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
@@ -112,7 +114,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   React.useEffect(() => {
     if (securityConfig.adminPassword) setAdminPass(securityConfig.adminPassword);
     if (securityConfig.userPassword) setUserPass(securityConfig.userPassword);
-  }, [securityConfig.adminPassword, securityConfig.userPassword]);
+    if (securityConfig.adminWhatsAppPhone) setAdminWaPhone(securityConfig.adminWhatsAppPhone);
+  }, [securityConfig.adminPassword, securityConfig.userPassword, securityConfig.adminWhatsAppPhone]);
 
   const handleSaveSecurity = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +132,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     try {
       await onUpdateSecurityConfig({
         adminPassword: adminPass.trim(),
-        userPassword: userPass.trim()
+        userPassword: userPass.trim(),
+        adminWhatsAppPhone: adminWaPhone.trim(),
+        requireWhatsAppOtpForAdmin: true
       });
       setSecuritySavedSuccess(true);
       setTimeout(() => setSecuritySavedSuccess(false), 4000);
@@ -1412,20 +1417,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </span>
               </div>
 
+              {/* WhatsApp do Administrador para Aprovação de Acesso em 2 Etapas */}
+              <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 space-y-2.5">
+                <div className="flex items-center space-x-2 text-amber-900 dark:text-amber-300">
+                  <Smartphone className="w-4 h-4 text-amber-600" />
+                  <label className="text-xs font-bold">
+                    WhatsApp do Administrador (para aprovação com código aleatório)
+                  </label>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={adminWaPhone}
+                    onChange={(e) => setAdminWaPhone(e.target.value)}
+                    placeholder="Ex: 5511986946245"
+                    required
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Para entrar como admin, o sistema exige que uma mensagem seja enviada para este WhatsApp, e você aprova fornecendo o código aleatório de 6 dígitos gerado para aquela sessão. Formato: DDI + DDD + Número (ex: <strong>5511986946245</strong>).
+                </p>
+              </div>
+
               {securitySavedSuccess && (
                 <div className="text-xs text-emerald-600 font-bold flex items-center space-x-1 animate-fade-in">
                   <Check className="w-4 h-4" />
-                  <span>Senhas de acesso atualizadas com sucesso no Firebase Firestore!</span>
+                  <span>Configurações de segurança e senhas atualizadas com sucesso no Firebase!</span>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={isSavingSecurity}
-                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-colors"
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer"
               >
                 {isSavingSecurity ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                <span>Atualizar Senhas no Firebase</span>
+                <span>Salvar Configurações de Segurança no Firebase</span>
               </button>
             </form>
           </div>

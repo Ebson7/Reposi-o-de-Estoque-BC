@@ -14,7 +14,7 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, CreateOrderPayload, Product, UnitType, RequestType, RequestStatus } from './types';
+import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta, CreateOrderPayload, Product, UnitType, RequestType, RequestStatus, AdminAuthChallenge } from './types';
 
 export const DEFAULT_VENDEDORES = [
   "ADALTON LUIZ",
@@ -49,13 +49,15 @@ export const DEFAULT_VENDEDORES = [
 
 export const DEFAULT_WHATSAPP_CONFIG: WhatsAppConfig = {
   enabled: true,
-  phoneNumber: "5511999999999",
+  phoneNumber: "5511986946245",
   mensagemPadrao: "Olá, segue nova solicitação de estoque para a Marsil Boracéia."
 };
 
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   adminPassword: "@adminmarsil2026",
-  userPassword: "@marsil2026"
+  userPassword: "@marsil2026",
+  adminWhatsAppPhone: "5511986946245",
+  requireWhatsAppOtpForAdmin: true
 };
 
 export const DEFAULT_CATALOG_META: CatalogMeta = {
@@ -383,7 +385,14 @@ export const firebaseService = {
 
     return onSnapshot(docRef, async (snapshot) => {
       if (snapshot.exists()) {
-        callback(snapshot.data() as WhatsAppConfig);
+        const data = snapshot.data() as WhatsAppConfig;
+        const validPhone = (data.phoneNumber && data.phoneNumber !== '5511999999999')
+          ? data.phoneNumber
+          : DEFAULT_WHATSAPP_CONFIG.phoneNumber;
+        callback({
+          ...data,
+          phoneNumber: validPhone
+        });
       } else {
         try {
           await setDoc(docRef, DEFAULT_WHATSAPP_CONFIG, { merge: true });
@@ -438,17 +447,28 @@ export const firebaseService = {
         const userPass = (data.userPassword && data.userPassword !== '1234') 
           ? data.userPassword 
           : DEFAULT_SECURITY_CONFIG.userPassword;
+        const adminPhone = (data.adminWhatsAppPhone && data.adminWhatsAppPhone !== '5511999999999')
+          ? data.adminWhatsAppPhone
+          : DEFAULT_SECURITY_CONFIG.adminWhatsAppPhone;
 
-        // Se no Firestore ainda estiver gravado os padrões antigos '123' ou '1234', atualiza no banco
-        if (data.adminPassword === '123' || data.userPassword === '1234') {
+        // Se no Firestore ainda estiver gravado os padrões antigos '123' ou '1234' ou placeholder, atualiza no banco
+        if (data.adminPassword === '123' || data.userPassword === '1234' || data.adminWhatsAppPhone === '5511999999999') {
           try {
-            await setDoc(docRef, { adminPassword: adminPass, userPassword: userPass, updatedAt: new Date().toISOString() }, { merge: true });
+            await setDoc(docRef, { 
+              adminPassword: adminPass, 
+              userPassword: userPass, 
+              adminWhatsAppPhone: adminPhone,
+              requireWhatsAppOtpForAdmin: true,
+              updatedAt: new Date().toISOString() 
+            }, { merge: true });
           } catch {}
         }
 
         callback({
           adminPassword: adminPass,
           userPassword: userPass,
+          adminWhatsAppPhone: adminPhone,
+          requireWhatsAppOtpForAdmin: data.requireWhatsAppOtpForAdmin !== undefined ? data.requireWhatsAppOtpForAdmin : true,
           updatedAt: data.updatedAt
         });
       } else {
@@ -475,6 +495,8 @@ export const firebaseService = {
     return {
       adminPassword: data.adminPassword || DEFAULT_SECURITY_CONFIG.adminPassword,
       userPassword: data.userPassword || DEFAULT_SECURITY_CONFIG.userPassword,
+      adminWhatsAppPhone: data.adminWhatsAppPhone || DEFAULT_SECURITY_CONFIG.adminWhatsAppPhone,
+      requireWhatsAppOtpForAdmin: data.requireWhatsAppOtpForAdmin !== undefined ? data.requireWhatsAppOtpForAdmin : true,
       updatedAt: data.updatedAt
     };
   },
@@ -491,9 +513,14 @@ export const firebaseService = {
         const userPass = (data.userPassword && data.userPassword !== '1234') 
           ? data.userPassword 
           : DEFAULT_SECURITY_CONFIG.userPassword;
+        const adminPhone = (data.adminWhatsAppPhone && data.adminWhatsAppPhone !== '5511999999999')
+          ? data.adminWhatsAppPhone
+          : DEFAULT_SECURITY_CONFIG.adminWhatsAppPhone;
         return {
           adminPassword: adminPass,
           userPassword: userPass,
+          adminWhatsAppPhone: adminPhone,
+          requireWhatsAppOtpForAdmin: data.requireWhatsAppOtpForAdmin !== undefined ? data.requireWhatsAppOtpForAdmin : true,
           updatedAt: data.updatedAt
         };
       } else {
@@ -503,6 +530,64 @@ export const firebaseService = {
       }
     } catch {}
     return DEFAULT_SECURITY_CONFIG;
+  },
+
+  // ========================================================
+  // 2.1. AUTORIZAÇÃO DE ADMIN EM 2 ETAPAS VIA WHATSAPP (OTP)
+  // ========================================================
+
+  async createAdminAuthChallenge(): Promise<AdminAuthChallenge> {
+    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const requestId = `ADM-${Math.floor(1000 + Math.random() * 9000)}`;
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutos
+    const challenge: AdminAuthChallenge = {
+      requestId,
+      code: randomCode,
+      createdAt: new Date().toISOString(),
+      expiresAt,
+      status: 'pending'
+    };
+
+    try {
+      const docRef = doc(db, 'admin_authorizations', requestId);
+      await setDoc(docRef, sanitizeForFirestore(challenge));
+    } catch (err) {
+      console.warn('[Firebase] Não foi possível gravar challenge no Firestore, operando localmente:', err);
+    }
+
+    return challenge;
+  },
+
+  async verifyAdminAuthCode(requestId: string, inputCode: string, fallbackCode?: string): Promise<boolean> {
+    const cleanInput = inputCode.trim().replace(/\D/g, '');
+    if (!cleanInput || cleanInput.length !== 6) return false;
+
+    // Se fornecido fallbackCode (em memória da sessão), compara diretamente
+    if (fallbackCode && cleanInput === fallbackCode.trim().replace(/\D/g, '')) {
+      try {
+        const docRef = doc(db, 'admin_authorizations', requestId);
+        await updateDoc(docRef, { status: 'approved', approvedAt: new Date().toISOString() });
+      } catch {}
+      return true;
+    }
+
+    try {
+      const docRef = doc(db, 'admin_authorizations', requestId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.status === 'approved') return false; // Já utilizado
+        if (data.expiresAt && Date.now() > data.expiresAt) return false; // Expirado
+        if (data.code && data.code.trim().replace(/\D/g, '') === cleanInput) {
+          await updateDoc(docRef, { status: 'approved', approvedAt: new Date().toISOString() });
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('[Firebase] Falha na verificação remota do código admin:', err);
+    }
+
+    return false;
   },
 
   // ========================================================

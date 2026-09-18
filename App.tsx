@@ -8,6 +8,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { LoginGate } from './components/LoginGate';
 import { HelpModal } from './components/HelpModal';
 import { PhoneEmulatorShell } from './components/PhoneEmulatorShell';
+import { AdminWhatsAppAuthModal } from './components/AdminWhatsAppAuthModal';
 import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, CreateOrderPayload } from './types';
 import { api } from './api';
 import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
@@ -15,9 +16,9 @@ import { KeyRound, X, ShieldAlert, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'user' | 'requests' | 'admin'>('user');
-  const [authRole, setAuthRole] = useState<'none' | 'vendor' | 'admin'>(() => {
-    return (localStorage.getItem('marsil_auth_role') as any) || 'none';
-  });
+  
+  // Requisito estrito de segurança: ninguém entra logado. Sempre inicia com 'none', exigindo login ativo a cada abertura.
+  const [authRole, setAuthRole] = useState<'none' | 'vendor' | 'admin'>('none');
 
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(DEFAULT_SECURITY_CONFIG);
 
@@ -54,8 +55,6 @@ export default function App() {
 
   // Login Modal
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [loginError, setLoginError] = useState('');
 
   // Help Modal
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -84,6 +83,12 @@ export default function App() {
       localStorage.setItem('marsil_dark_mode', 'false');
     }
   }, [isDarkMode]);
+
+  // Garantia de segurança: ninguém entra logado ao abrir a aplicação
+  useEffect(() => {
+    localStorage.removeItem('marsil_auth_role');
+    sessionStorage.removeItem('marsil_auth_role');
+  }, []);
 
   // Persist active vendor
   const handleSelectVendor = (vendor: string) => {
@@ -250,37 +255,24 @@ export default function App() {
     setSecurityConfig(updated);
   };
 
-  // Admin Login Modal Submission
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const adminExpected = securityConfig.adminPassword || '@adminmarsil2026';
-    if (passwordInput.trim() === adminExpected) {
-      setAuthRole('admin');
-      localStorage.setItem('marsil_auth_role', 'admin');
-      setShowLoginModal(false);
-      setPasswordInput('');
-      setLoginError('');
-      setActiveTab('admin');
-    } else {
-      setLoginError(`Senha administrativa incorreta.`);
-    }
-  };
-
   const handleLogout = () => {
     setAuthRole('none');
     localStorage.removeItem('marsil_auth_role');
+    sessionStorage.removeItem('marsil_auth_role');
     setActiveTab('user');
   };
 
   // Se o usuário ainda não autenticou (authRole === 'none'), exibe a tela de login com senha de Usuário e Admin
+  // Ninguém entra logado por padrão - sempre é necessário fazer o login
   if (authRole === 'none') {
     return (
       <div className={isDarkMode ? 'dark' : ''}>
         <LoginGate
           securityConfig={securityConfig}
+          whatsappConfig={whatsappConfig}
           onLoginSuccess={(role) => {
             setAuthRole(role);
-            localStorage.setItem('marsil_auth_role', role);
+            // Regra estrita de segurança: NÃO persiste em localStorage para garantir que ninguém entre logado
             if (role === 'admin') {
               setActiveTab('admin');
             } else {
@@ -307,8 +299,6 @@ export default function App() {
           setActiveTab={setActiveTab}
           authRole={authRole}
           onOpenLogin={() => {
-            setLoginError('');
-            setPasswordInput('');
             setShowLoginModal(true);
           }}
           onLogout={handleLogout}
@@ -412,7 +402,6 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
-                    setLoginError('');
                     setShowLoginModal(true);
                   }}
                   className="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
@@ -432,8 +421,6 @@ export default function App() {
           setActiveTab={setActiveTab}
           authRole={authRole}
           onOpenLogin={() => {
-            setLoginError('');
-            setPasswordInput('');
             setShowLoginModal(true);
           }}
           pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
@@ -443,56 +430,18 @@ export default function App() {
         {/* Indicador de Status Offline / Reconexão */}
         <OfflineIndicator />
 
-        {/* Admin Login Modal */}
-        {showLoginModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                    <KeyRound className="w-4 h-4" />
-                  </div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">Acesso Admin</h3>
-                </div>
-                <button
-                  onClick={() => setShowLoginModal(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-500">
-                Digite a senha administrativa para gerenciar a carga em lote e aprovar pedidos.
-              </p>
-
-              <form onSubmit={handleLoginSubmit} className="space-y-3">
-                <div>
-                  <input
-                    type="password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Senha de administrador..."
-                    autoFocus
-                    required
-                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {loginError && (
-                  <div className="text-xs text-rose-600 font-bold">{loginError}</div>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
-                >
-                  Autenticar e Entrar
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* Admin WhatsApp 2-Step Auth Modal */}
+        <AdminWhatsAppAuthModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => {
+            setAuthRole('admin');
+            setActiveTab('admin');
+            setShowLoginModal(false);
+          }}
+          securityConfig={securityConfig}
+          whatsappConfig={whatsappConfig}
+        />
 
         {/* Help / Guide Modal */}
         <HelpModal
