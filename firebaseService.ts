@@ -432,6 +432,19 @@ export const firebaseService = {
     await setDoc(docRef, meta, { merge: true });
   },
 
+  async getCatalogMeta(): Promise<CatalogMeta> {
+    try {
+      const docRef = doc(db, 'config', 'catalogMeta');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return snap.data() as CatalogMeta;
+      }
+    } catch (err) {
+      console.warn('[Firebase] Erro ao buscar meta do catálogo:', err);
+    }
+    return DEFAULT_CATALOG_META;
+  },
+
   /**
    * Assina em tempo real as configurações de senhas (Usuário & Administrador)
    */

@@ -3,6 +3,8 @@ import path from 'path';
 import type { Response } from 'express';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Product, StockRequest, WhatsAppConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, OrderItem, GroupedOrder } from '../types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -219,11 +221,101 @@ class CentralStore {
 
   private sseClients: Set<Response> = new Set();
   private keepAliveInterval: NodeJS.Timeout | null = null;
+  private firestoreDb: any = null;
+  private isSyncingFirestore = false;
 
   constructor() {
     this.ensureDataDirectory();
     this.loadFromDisk();
     this.startKeepAlive();
+    this.initFirestore();
+    // Executa sincronização com o Firestore imediatamente na inicialização
+    this.syncWithFirestore().catch((err) => {
+      console.warn("[Store] Erro ao sincronizar catálogo do Firestore na inicialização:", err);
+    });
+    // Verifica atualizações no Firestore a cada 45 segundos
+    setInterval(() => {
+      this.syncWithFirestore().catch(() => {});
+    }, 45 * 1000);
+  }
+
+  private initFirestore(): void {
+    try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const app = getApps().length > 0 ? getApps()[0] : initializeApp(config);
+        this.firestoreDb = config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'
+          ? getFirestore(app, config.firestoreDatabaseId)
+          : getFirestore(app);
+        console.log('[Store] Firebase Firestore conectado com sucesso no servidor Node.');
+      }
+    } catch (e: any) {
+      console.warn('[Store] Falha ao conectar Firestore no servidor:', e.message);
+    }
+  }
+
+  public async syncWithFirestore(force = false): Promise<boolean> {
+    if (this.isSyncingFirestore) return false;
+    if (!this.firestoreDb) {
+      this.initFirestore();
+    }
+    if (!this.firestoreDb) return false;
+
+    this.isSyncingFirestore = true;
+    try {
+      const metaRef = doc(this.firestoreDb, 'config', 'catalogMeta');
+      const metaSnap = await getDoc(metaRef);
+      if (!metaSnap.exists()) {
+        this.isSyncingFirestore = false;
+        return false;
+      }
+
+      const remoteMeta = metaSnap.data() as CatalogMeta;
+      const remoteLastUpdated = remoteMeta.lastUpdated || '';
+      const localLastUpdated = this.catalogMeta?.lastUpdated || '';
+
+      // Sincroniza se:
+      // 1. Forçado explicitamente (force = true)
+      // 2. O catálogo em memória possui menos de 10 produtos (apenas sementes)
+      // 3. A data do Firestore é diferente/mais recente que a local
+      const shouldSync = force || this.products.length <= 10 || (remoteLastUpdated && remoteLastUpdated !== localLastUpdated);
+
+      if (shouldSync) {
+        console.log(`[Store] Sincronizando catálogo do Firestore (Remoto: ${remoteMeta.totalProducts} produtos, Atualizado em: ${remoteLastUpdated})...`);
+        const chunksCol = collection(this.firestoreDb, 'catalog_chunks');
+        const chunksSnap = await getDocs(chunksCol);
+
+        if (!chunksSnap.empty) {
+          const sortedDocs = chunksSnap.docs.sort((a, b) => (a.data().index ?? 0) - (b.data().index ?? 0));
+          const allProds: Product[] = [];
+          for (const d of sortedDocs) {
+            const data = d.data();
+            if (Array.isArray(data.items)) {
+              allProds.push(...data.items);
+            }
+          }
+
+          if (allProds.length > 0) {
+            this.products = allProds.map(p => this.calculateProductMetrics(p));
+            this.catalogMeta = {
+              ...remoteMeta,
+              totalProducts: this.products.length
+            };
+            this.saveToDisk();
+            this.broadcast('catalog_updated', { meta: this.catalogMeta, count: this.products.length });
+            console.log(`[Store] ✅ ${this.products.length} produtos sincronizados do Firestore para a memória e disco do servidor!`);
+            this.isSyncingFirestore = false;
+            return true;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Store] Erro ao sincronizar catálogo do Firestore:', err.message);
+    } finally {
+      this.isSyncingFirestore = false;
+    }
+    return false;
   }
 
   private ensureDataDirectory(): void {

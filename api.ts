@@ -15,27 +15,99 @@ export const api = {
     vendedores: string[];
     pendingRequestsCount: number;
   }> {
+    let serverRes: any = null;
     try {
       const res = await fetch('/api/status');
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
-        return await res.json();
+        serverRes = await res.json();
       }
     } catch {
       // Ambiente estático / Vercel: usa Firestore e armazenamento local
     }
 
+    // Se o servidor retornou status com produtos reais (> 10)
+    if (serverRes && serverRes.productsCount > 10) {
+      return serverRes;
+    }
+
+    // Caso o servidor tenha apenas sementes ou esteja offline, busca metadados do Firestore
+    let firestoreMeta: CatalogMeta | null = null;
+    try {
+      firestoreMeta = await firebaseService.getCatalogMeta();
+    } catch {
+      // Ignora erro temporário
+    }
+
     const localMeta = await localCatalogService.getMeta();
     const localProds = await localCatalogService.getProducts();
 
+    // Se o Firestore tem catálogo real (> 10) e o cliente ainda não baixou, sincroniza em segundo plano
+    if (firestoreMeta && firestoreMeta.totalProducts > 10 && localProds.length <= 10) {
+      this.syncCatalog(true).catch(() => {});
+    }
+
     return {
       status: 'online',
-      productsCount: localProds.length,
-      catalogMeta: localMeta || DEFAULT_CATALOG_META,
-      whatsappConfig: DEFAULT_WHATSAPP_CONFIG,
-      vendedores: DEFAULT_VENDEDORES,
-      pendingRequestsCount: 0
+      productsCount: firestoreMeta?.totalProducts || localProds.length || serverRes?.productsCount || 0,
+      catalogMeta: firestoreMeta || serverRes?.catalogMeta || localMeta || DEFAULT_CATALOG_META,
+      whatsappConfig: serverRes?.whatsappConfig || DEFAULT_WHATSAPP_CONFIG,
+      vendedores: serverRes?.vendedores || DEFAULT_VENDEDORES,
+      pendingRequestsCount: serverRes?.pendingRequestsCount || 0
     };
+  },
+
+  /**
+   * Força sincronização ativa do catálogo a partir do Firestore / Servidor
+   */
+  async syncCatalog(force = false): Promise<CatalogMeta> {
+    // 1. Tenta acionar o servidor Node para garantir que o backend sincronizou do Firestore
+    try {
+      await fetch('/api/sync', { method: 'POST' });
+    } catch {
+      // Backend offline ou ambiente estático
+    }
+
+    // 2. Busca os metadados do Firestore
+    try {
+      const meta = await firebaseService.getCatalogMeta();
+      const localMeta = await localCatalogService.getMeta();
+      const localProds = await localCatalogService.getProducts();
+
+      const shouldDownload = force || localProds.length <= 10 || (meta.lastUpdated && meta.lastUpdated !== localMeta?.lastUpdated);
+
+      if (shouldDownload) {
+        console.log('[API] Baixando chunks atualizados do Firestore para sincronização client-side...');
+        const firestoreProds = await firebaseService.getProductsFromFirestore();
+        if (firestoreProds && firestoreProds.length > 0) {
+          let comMarsil = 0;
+          let comBoraceia = 0;
+          let zerados = 0;
+          for (const p of firestoreProds) {
+            if (p.estoqueMarsil > 0) comMarsil++;
+            if (p.estoqueBoraceia > 0) comBoraceia++;
+            if (p.estoqueMarsil <= 0 && p.estoqueBoraceia <= 0) zerados++;
+          }
+          const fullMeta: CatalogMeta = {
+            totalProducts: firestoreProds.length,
+            lastUpdated: meta.lastUpdated || new Date().toISOString(),
+            sourceName: meta.sourceName || 'Firebase Firestore',
+            syncUrl: meta.syncUrl || '',
+            itensComEstoqueMarsil: comMarsil,
+            itensComEstoqueBoraceia: comBoraceia,
+            itensZerados: zerados
+          };
+          await localCatalogService.setCatalog(firestoreProds, fullMeta);
+          return fullMeta;
+        }
+      }
+      return meta;
+    } catch (err) {
+      console.warn('[API] Falha ao sincronizar do Firestore:', err);
+    }
+
+    const localMeta = await localCatalogService.getMeta();
+    return localMeta || DEFAULT_CATALOG_META;
   },
 
   /**
@@ -56,7 +128,8 @@ export const api = {
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const json = await res.json();
-        if (json && Array.isArray(json.items)) {
+        // Se o servidor retornou catálogo real (> 10 itens)
+        if (json && Array.isArray(json.items) && json.total > 10) {
           return json;
         }
       }
@@ -64,35 +137,16 @@ export const api = {
       // Backend não disponível (como na Vercel); prossegue para motor client-side
     }
 
-    // Se já temos produtos no IndexedDB local, busca instantaneamente
-    if (localCatalogService.hasCatalog()) {
+    // Se já temos produtos no IndexedDB local com quantidade real
+    const localProds = await localCatalogService.getProducts();
+    if (localProds.length > 10) {
       return localCatalogService.queryProducts(params);
     }
 
-    // Se não há dados locais, sincroniza do Firebase Firestore
+    // Se não há dados locais com mais de 10 produtos, sincroniza do Firebase Firestore
     try {
-      const firestoreProds = await firebaseService.getProductsFromFirestore();
-      if (firestoreProds && firestoreProds.length > 0) {
-        let comMarsil = 0;
-        let comBoraceia = 0;
-        let zerados = 0;
-        for (const p of firestoreProds) {
-          if (p.estoqueMarsil > 0) comMarsil++;
-          if (p.estoqueBoraceia > 0) comBoraceia++;
-          if (p.estoqueMarsil <= 0 && p.estoqueBoraceia <= 0) zerados++;
-        }
-        const meta: CatalogMeta = {
-          totalProducts: firestoreProds.length,
-          lastUpdated: new Date().toISOString(),
-          sourceName: 'Firebase Firestore',
-          itensComEstoqueMarsil: comMarsil,
-          itensComEstoqueBoraceia: comBoraceia,
-          itensZerados: zerados
-        };
-
-        await localCatalogService.setCatalog(firestoreProds, meta);
-        return localCatalogService.queryProducts(params);
-      }
+      await this.syncCatalog(true);
+      return localCatalogService.queryProducts(params);
     } catch (err) {
       console.warn('[API] Erro ao sincronizar catálogo do Firestore:', err);
     }

@@ -115,6 +115,13 @@ export default function App() {
       setWhatsappConfig(statusRes.whatsappConfig);
       setRequests(reqsRes);
       setVendedores(vendsRes);
+
+      // Se o catálogo possui menos de 10 produtos ou nunca foi sincronizado neste dispositivo,
+      // força sincronização direta do Firestore para garantir o catálogo completo (8.000+ produtos)
+      if (statusRes.productsCount <= 10) {
+        const syncedMeta = await api.syncCatalog(true);
+        setCatalogMeta(syncedMeta);
+      }
     } catch (err) {
       console.error("[App] Erro ao carregar dados iniciais:", err);
     } finally {
@@ -155,7 +162,15 @@ export default function App() {
     // 4. Escuta metadados do catálogo em tempo real no Firestore
     const unsubCatalogMeta = firebaseService.subscribeToCatalogMeta((liveMeta) => {
       if (liveMeta && liveMeta.lastUpdated) {
-        setCatalogMeta(prev => ({ ...prev, ...liveMeta }));
+        setCatalogMeta(prev => {
+          if (prev.lastUpdated !== liveMeta.lastUpdated) {
+            console.log("[App] Novo lote de catálogo detectado no Firestore! Sincronizando produtos...");
+            api.syncCatalog().then(newMeta => {
+              setCatalogMeta(newMeta);
+            }).catch(() => {});
+          }
+          return { ...prev, ...liveMeta };
+        });
       }
     });
 

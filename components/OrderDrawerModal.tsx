@@ -94,40 +94,44 @@ export const OrderDrawerModal: React.FC<OrderDrawerModalProps> = ({
     });
   };
 
-  // Build formatted WhatsApp message
+  // Build formatted WhatsApp message (compact reduced format)
   const buildWhatsAppMessage = (): string => {
-    const nowStr = new Date().toLocaleString('pt-BR');
-    let msg = `*SOLICITAÇÃO DE TRANSFERÊNCIA DE ESTOQUE - BORACÉIA*\n`;
-    msg += `👤 *Solicitante:* ${solicitante}\n`;
-    msg += `🎯 *Tipo Principal:* ${tipoGeral}\n`;
-    msg += `📅 *Data/Hora:* ${nowStr}\n`;
-    if (observacoesGerais.trim()) {
-      msg += `📝 *Obs Geral:* ${observacoesGerais.trim()}\n`;
-    }
-    msg += `\n*📦 ITENS DO PEDIDO (${totals.totalItens} produtos / ${totals.totalVolumes} volumes):*\n`;
-    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
 
-    orderItems.forEach((item, index) => {
-      const idx = index + 1;
-      msg += `${idx}) *[Cód: ${item.productCode}]* ${item.productName}\n`;
-      msg += `   • Qtde: *${item.quantidade} ${item.unidade}*`;
-      if (item.productSabor) msg += ` | Sabor: ${item.productSabor}`;
-      msg += `\n`;
-      msg += `   • Estoque: Marsil: ${item.estoqueMarsilMomento ?? 'N/D'} | Boracéia: ${item.estoqueBoraceiaMomento ?? 'N/D'}\n`;
-      if (item.tipo && item.tipo !== tipoGeral) {
-        msg += `   • Tipo: ${item.tipo}\n`;
-      }
-      if (item.isValidadeCurta) {
-        msg += `   • ⚠️ *Validade Curta*\n`;
-      }
-      if (item.observacoes) {
-        msg += `   • Obs: ${item.observacoes}\n`;
-      }
+    const vendedorName = (solicitante || '').trim().toUpperCase();
+
+    let msg = `📦 PEDIDO MARSIL\n`;
+    msg += `📅 Data do Pedido: ${dateStr}\n`;
+    msg += `👤 Vendedor: ${vendedorName}\n\n`;
+
+    orderItems.forEach((item) => {
+      const qtd = item.quantidade;
+      const rawUnit = String(item.unidade || 'CX');
+      const unit = (rawUnit === 'Caixa' || rawUnit === 'CX') 
+        ? 'CX' 
+        : (rawUnit === 'Unidade' || rawUnit === 'UN')
+        ? 'UN'
+        : rawUnit.toUpperCase();
+      
+      const code = item.productCode || item.productNovoCodigo || '';
+      
+      let desc = (item.productSabor && item.productSabor.trim() !== '-' && item.productSabor.trim() !== 'PADRAO')
+        ? item.productSabor.trim()
+        : (item.productName || '').trim();
+      desc = desc.toUpperCase();
+
+      const situacao = (item.productSituacao || 'NO').trim().toUpperCase();
+
+      msg += `QTD: ${qtd} ${unit} - Cód: ${code} (${desc}) [${situacao}]\n`;
     });
 
-    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    msg += `*Total:* ${totals.totalItens} itens selecionados (${totals.totalVolumes} volumes)\n`;
-    msg += `Por favor, confirmar a separação e transferência. Obrigado!`;
+    const obs = observacoesGerais?.trim() ? observacoesGerais.trim() : 'Pedido Extra Boracéia';
+    msg += `\n${obs}`;
+
     return msg;
   };
 

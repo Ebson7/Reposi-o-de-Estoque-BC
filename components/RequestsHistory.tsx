@@ -133,46 +133,77 @@ export const RequestsHistory: React.FC<RequestsHistoryProps> = ({
     }));
   };
 
-  // Build WhatsApp text for single request
+  // Build WhatsApp text for single request (enxuto e direto no padrão solicitado)
   const handleCopySingleMessage = (req: StockRequest) => {
-    const msg = `*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
-📦 *Produto:* ${req.productName}
-🔢 *Código:* ${req.productCode}
-🍓 *Sabor:* ${req.productSabor || 'Padrão'}
-📊 *Quantidade:* ${req.quantidade} ${req.unidade}
-🎯 *Tipo:* ${req.tipo}
-👤 *Solicitante:* ${req.solicitante}
-${req.isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${req.observacoes ? `📝 *Obs:* ${req.observacoes}\n` : ''}📌 *Status:* ${req.status}
-📅 *Data:* ${new Date(req.dataSolicitacao).toLocaleString('pt-BR')}`;
+    const d = new Date(req.dataSolicitacao);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
+
+    const vendedorName = (req.solicitante || '').trim().toUpperCase();
+    const rawReqUnit = String(req.unidade || 'CX');
+    const unit = (rawReqUnit === 'Caixa' || rawReqUnit === 'CX') 
+      ? 'CX' 
+      : (rawReqUnit === 'Unidade' || rawReqUnit === 'UN') 
+      ? 'UN' 
+      : rawReqUnit.toUpperCase();
+    const code = req.productCode || req.productNovoCodigo || '';
+    let desc = (req.productSabor && req.productSabor.trim() !== '-' && req.productSabor.trim() !== 'PADRAO')
+      ? req.productSabor.trim()
+      : (req.productName || '').trim();
+    desc = desc.toUpperCase();
+    const situacao = (req.productSituacao || 'NO').trim().toUpperCase();
+
+    let msg = `📦 PEDIDO MARSIL\n`;
+    msg += `📅 Data do Pedido: ${dateStr}\n`;
+    msg += `👤 Vendedor: ${vendedorName}\n\n`;
+    msg += `QTD: ${req.quantidade} ${unit} - Cód: ${code} (${desc}) [${situacao}]\n\n`;
+    msg += req.observacoes?.trim() ? req.observacoes.trim() : 'Pedido Extra Boracéia';
 
     navigator.clipboard.writeText(msg);
     setCopiedId(req.id);
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Build WhatsApp text for an entire grouped order
+  // Build WhatsApp text for an entire grouped order (enxuto e direto no padrão solicitado)
   const buildGroupWhatsAppText = (group: OrderGroup): string => {
-    let msg = `*SOLICITAÇÃO DE TRANSFERÊNCIA DE ESTOQUE - BORACÉIA*\n`;
-    msg += `👤 *Solicitante:* ${group.solicitante}\n`;
-    msg += `🎯 *Tipo Principal:* ${group.tipoGeral || 'Aposta na Venda'}\n`;
-    msg += `📅 *Data:* ${new Date(group.dataSolicitacao).toLocaleString('pt-BR')}\n`;
-    msg += `📌 *Status Geral:* ${group.status}\n`;
-    if (group.observacoesGerais) {
-      msg += `📝 *Obs Geral:* ${group.observacoesGerais}\n`;
-    }
-    msg += `\n*📦 ITENS DO PEDIDO (${group.items.length} produtos / ${group.totalVolumes} volumes):*\n`;
-    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    const d = new Date(group.dataSolicitacao);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
 
-    group.items.forEach((item, idx) => {
-      msg += `${idx + 1}) *[Cód: ${item.productCode}]* ${item.productName}\n`;
-      msg += `   • Qtde: *${item.quantidade} ${item.unidade}*`;
-      if (item.productSabor) msg += ` | Sabor: ${item.productSabor}`;
-      msg += `\n`;
-      msg += `   • Status: ${item.status}\n`;
-      if (item.respostaAdmin) msg += `   • Retorno: ${item.respostaAdmin}\n`;
+    const vendedorName = (group.solicitante || '').trim().toUpperCase();
+
+    let msg = `📦 PEDIDO MARSIL\n`;
+    msg += `📅 Data do Pedido: ${dateStr}\n`;
+    msg += `👤 Vendedor: ${vendedorName}\n\n`;
+
+    group.items.forEach((item) => {
+      const qtd = item.quantidade;
+      const rawUnit = String(item.unidade || 'CX');
+      const unit = (rawUnit === 'Caixa' || rawUnit === 'CX') 
+        ? 'CX' 
+        : (rawUnit === 'Unidade' || rawUnit === 'UN')
+        ? 'UN'
+        : rawUnit.toUpperCase();
+      
+      const code = item.productCode || item.productNovoCodigo || '';
+      
+      let desc = (item.productSabor && item.productSabor.trim() !== '-' && item.productSabor.trim() !== 'PADRAO')
+        ? item.productSabor.trim()
+        : (item.productName || '').trim();
+      desc = desc.toUpperCase();
+
+      const situacao = (item.productSituacao || 'NO').trim().toUpperCase();
+
+      msg += `QTD: ${qtd} ${unit} - Cód: ${code} (${desc}) [${situacao}]\n`;
     });
 
-    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    const obs = group.observacoesGerais?.trim() ? group.observacoesGerais.trim() : 'Pedido Extra Boracéia';
+    msg += `\n${obs}`;
+
     return msg;
   };
 

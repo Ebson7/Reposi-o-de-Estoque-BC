@@ -382,14 +382,31 @@ export const UserPortal: React.FC<UserPortalProps> = ({
 
   const copyModalMessage = () => {
     if (!selectedProduct) return;
-    const msg = `*SOLICITAÇÃO DE ESTOQUE - BORACÉIA*
-📦 *Produto:* ${selectedProduct.produto}
-🔢 *Código:* ${selectedProduct.codigo}
-🍓 *Sabor:* ${selectedProduct.sabor || 'Padrão'}
-📊 *Quantidade:* ${quantidade} ${unidade}
-🎯 *Tipo:* ${tipo}
-👤 *Solicitante:* ${solicitante}
-${isValidadeCurta ? '⚠️ *ATENÇÃO:* Validade Curta\n' : ''}${observacoes ? `📝 *Obs:* ${observacoes}\n` : ''}🏢 *Estoque Marsil:* ${selectedProduct.estoqueMarsil} | *Boracéia:* ${selectedProduct.estoqueBoraceia}`;
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const year = today.getFullYear();
+    const dateStr = `${day}/${month}/${year}`;
+
+    const vendedorName = (solicitante || '').trim().toUpperCase();
+    const rawUnit = String(unidade || 'CX');
+    const unit = (rawUnit === 'Caixa' || rawUnit === 'CX') 
+      ? 'CX' 
+      : (rawUnit === 'Unidade' || rawUnit === 'UN') 
+      ? 'UN' 
+      : rawUnit.toUpperCase();
+    const code = selectedProduct.codigo || selectedProduct.novoCodigo || '';
+    let desc = (selectedProduct.sabor && selectedProduct.sabor.trim() !== '-' && selectedProduct.sabor.trim() !== 'PADRAO')
+      ? selectedProduct.sabor.trim()
+      : (selectedProduct.produto || '').trim();
+    desc = desc.toUpperCase();
+    const situacao = (selectedProduct.situacao || 'NO').trim().toUpperCase();
+
+    let msg = `📦 PEDIDO MARSIL\n`;
+    msg += `📅 Data do Pedido: ${dateStr}\n`;
+    msg += `👤 Vendedor: ${vendedorName}\n\n`;
+    msg += `QTD: ${quantidade} ${unit} - Cód: ${code} (${desc}) [${situacao}]\n\n`;
+    msg += observacoes?.trim() ? observacoes.trim() : 'Pedido Extra Boracéia';
 
     navigator.clipboard.writeText(msg);
     setCopiedMsg(true);

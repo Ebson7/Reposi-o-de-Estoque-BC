@@ -11,6 +11,14 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.text({ limit: "50mb", type: ["text/*", "application/csv"] }));
 
+  // Middleware anti-cache estrito para todas as chamadas de API (evita respostas defasadas no PWA/links)
+  app.use("/api", (req, res, next) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    next();
+  });
+
   // ==========================================
   // 1. STREAMING EM TEMPO REAL (Server-Sent Events)
   // ==========================================
@@ -27,6 +35,21 @@ async function startServer() {
       time: new Date().toISOString(),
       ...store.getAppState()
     });
+  });
+
+  // Sincronização forçada do Firestore com o Servidor
+  app.post("/api/sync", async (req, res) => {
+    try {
+      const updated = await store.syncWithFirestore(true);
+      res.json({
+        success: true,
+        updated,
+        time: new Date().toISOString(),
+        ...store.getAppState()
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================
@@ -433,8 +456,29 @@ Se não encontrar um filtro, deixe como string vazia.`;
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        // Arquivos HTML, SW e manifestos NUNCA devem ser armazenados em cache permanente
+        if (
+          filePath.endsWith('.html') ||
+          filePath.endsWith('sw.js') ||
+          filePath.endsWith('registerSW.js') ||
+          filePath.endsWith('.webmanifest') ||
+          filePath.endsWith('manifest.json')
+        ) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        } else {
+          // Arquivos com hash gerados pelo vite (assets)
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
     app.get("*all", (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
