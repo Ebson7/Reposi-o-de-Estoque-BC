@@ -1,7 +1,8 @@
-import React from 'react';
-import { Package, Search, ShieldCheck, Sun, Moon, LogOut, KeyRound, Radio, Clock, ShoppingCart, RefreshCw, User, HelpCircle, Smartphone, Monitor } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Package, Search, ShieldCheck, Sun, Moon, LogOut, KeyRound, Radio, Clock, ShoppingCart, RefreshCw, User, HelpCircle, Smartphone, Monitor, Bell, BellRing, Check } from 'lucide-react';
 import { CatalogMeta } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
+import { fcmService } from '../fcmService';
 
 interface HeaderProps {
   activeTab: 'user' | 'requests' | 'admin';
@@ -19,6 +20,7 @@ interface HeaderProps {
   onOpenHelp?: () => void;
   isPhoneEmulating?: boolean;
   onTogglePhoneEmulating?: () => void;
+  activeVendor?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,8 +38,56 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   onOpenHelp,
   isPhoneEmulating,
-  onTogglePhoneEmulating
+  onTogglePhoneEmulating,
+  activeVendor
 }) => {
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [isRequestingNotif, setIsRequestingNotif] = useState(false);
+  const [showNotifToast, setShowNotifToast] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission);
+      if (Notification.permission === 'granted') {
+        fcmService.initFCM(activeVendor || 'Vendedor').catch(() => {});
+      }
+    }
+  }, [activeVendor]);
+
+  const handleToggleNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert("Notificações push não são suportadas neste navegador.");
+      return;
+    }
+
+    if (notificationPermission === 'granted') {
+      fcmService.triggerNativeNotification(
+        "📦 Notificações Marsil Ativas",
+        "Você já está inscrito para receber alertas em tempo real quando o estoque for atualizado!"
+      );
+      setShowNotifToast(true);
+      setTimeout(() => setShowNotifToast(false), 3000);
+      return;
+    }
+
+    setIsRequestingNotif(true);
+    try {
+      const res = await fcmService.requestPushPermission(activeVendor || 'Vendedor');
+      if (res.granted) {
+        setNotificationPermission('granted');
+        setShowNotifToast(true);
+        setTimeout(() => setShowNotifToast(false), 3000);
+        fcmService.triggerNativeNotification(
+          "🎉 Notificações Ativadas!",
+          "Você receberá alertas em tempo real sempre que o administrador subir um novo estoque!"
+        );
+      } else if (res.error) {
+        alert(res.error);
+      }
+    } finally {
+      setIsRequestingNotif(false);
+    }
+  };
   const formatTimeAgo = (isoString?: string) => {
     if (!isoString) return 'Desconhecido';
     try {
@@ -102,6 +152,35 @@ export const Header: React.FC<HeaderProps> = ({
             
             {/* Botão de Instalar PWA */}
             <PWAInstallButton variant="header" />
+
+            {/* Botão de Notificações Push FCM */}
+            <button
+              onClick={handleToggleNotifications}
+              disabled={isRequestingNotif}
+              title={
+                notificationPermission === 'granted'
+                  ? 'Notificações push de estoque ativas (FCM)'
+                  : 'Clique para ativar notificações push de atualização de estoque'
+              }
+              className={`relative flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                notificationPermission === 'granted'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700 hover:border-blue-300'
+              }`}
+            >
+              {notificationPermission === 'granted' ? (
+                <>
+                  <BellRing className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden md:inline">Alertas Ativos</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden md:inline">Ativar Alertas</span>
+                  <span className="w-2 h-2 rounded-full bg-blue-600 absolute -top-0.5 -right-0.5 animate-ping" />
+                </>
+              )}
+            </button>
 
             {/* Nav Tabs (Exclusivo Admin - para usuário a tela é somente Consulta) */}
             {authRole === 'admin' ? (

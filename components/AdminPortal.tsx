@@ -30,10 +30,13 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Smartphone
+  Smartphone,
+  Bell,
+  SendHorizontal
 } from 'lucide-react';
 import { StockRequest, WhatsAppConfig, SecurityConfig, CatalogMeta } from '../types';
 import { api } from '../api';
+import { fcmService } from '../fcmService';
 
 interface AdminPortalProps {
   requests: StockRequest[];
@@ -146,6 +149,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
+  // Firebase Cloud Messaging (FCM) & Notificações Push
+  const [fcmDevicesCount, setFcmDevicesCount] = useState<number>(0);
+  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
+  const [pushSentSuccess, setPushSentSuccess] = useState(false);
+
+  React.useEffect(() => {
+    fcmService.getRegisteredDevicesCount().then(setFcmDevicesCount).catch(() => {});
+  }, [activeSubTab]);
+
+  const handleSendTestPush = async () => {
+    setIsSendingTestPush(true);
+    try {
+      await fcmService.sendCatalogNotification(
+        catalogMeta,
+        catalogMeta.totalProducts,
+        `🔔 Notificação aos Vendedores: Estoque atualizado com ${catalogMeta.totalProducts.toLocaleString('pt-BR')} itens disponíveis para consulta!`
+      );
+      setPushSentSuccess(true);
+      setTimeout(() => setPushSentSuccess(false), 4000);
+    } catch (e: any) {
+      alert("Erro ao enviar notificação de teste: " + (e.message || "Falha"));
+    } finally {
+      setIsSendingTestPush(false);
+    }
+  };
+
   // View Mode for Requests tab
   const [adminViewMode, setAdminViewMode] = useState<'grouped' | 'individual'>('grouped');
   const [expandedAdminOrders, setExpandedAdminOrders] = useState<Record<string, boolean>>({});
@@ -211,6 +240,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         message: `Sucesso: ${res.count.toLocaleString('pt-BR')} produtos importados e sincronizados com sucesso!`
       });
       onBatchUploaded(res.count, res.meta);
+      // Disparo automático de notificação push FCM aos vendedores
+      fcmService.sendCatalogNotification(res.meta, res.count).catch((e) => {
+        console.warn("[AdminPortal] Aviso ao enviar notificação FCM:", e);
+      });
     } catch (err: any) {
       console.error("Erro na carga em lote:", err);
       setUploadStatus({
@@ -317,6 +350,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setPasteText('');
       setShowPasteBox(false);
       onBatchUploaded(res.count, res.meta);
+      fcmService.sendCatalogNotification(res.meta, res.count).catch(() => {});
     } catch (err: any) {
       setUploadStatus({
         type: 'error',
@@ -342,6 +376,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         message: `Sucesso: ${res.count.toLocaleString('pt-BR')} produtos sincronizados pelo link!`
       });
       onBatchUploaded(res.count, res.meta);
+      fcmService.sendCatalogNotification(res.meta, res.count).catch(() => {});
     } catch (err: any) {
       setUploadStatus({
         type: 'error',
@@ -624,6 +659,59 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 {catalogMeta.itensZerados.toLocaleString('pt-BR')}
               </p>
               <span className="text-[10px] text-slate-500">Sem saldo em ambas</span>
+            </div>
+          </div>
+
+          {/* FCM Push Notification Management Card */}
+          <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-purple-950/40 p-4 sm:p-5 rounded-2xl border border-blue-200 dark:border-blue-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
+                <Bell className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Firebase Cloud Messaging (FCM) Ativo
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Notificações Push
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 max-w-xl">
+                  Ao atualizar a planilha, os vendedores recebem uma notificação push imediata na tela do celular e do computador, sincronizando o catálogo no mesmo instante.
+                  {fcmDevicesCount > 0 && (
+                    <span className="font-semibold text-blue-600 dark:text-blue-400 ml-1">
+                      ({fcmDevicesCount} {fcmDevicesCount === 1 ? 'dispositivo conectado' : 'dispositivos conectados'})
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleSendTestPush}
+                disabled={isSendingTestPush}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-slate-800 border border-blue-300 dark:border-blue-700 rounded-xl shadow-sm transition-all disabled:opacity-50"
+              >
+                {isSendingTestPush ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    <span>Enviando...</span>
+                  </>
+                ) : pushSentSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span className="text-emerald-600">Disparado!</span>
+                  </>
+                ) : (
+                  <>
+                    <SendHorizontal className="w-4 h-4 text-blue-600" />
+                    <span>Enviar Notificação de Teste</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 

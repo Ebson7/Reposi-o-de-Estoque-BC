@@ -13,7 +13,8 @@ import { PWAInstallModal } from './components/PWAInstallModal';
 import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, CreateOrderPayload } from './types';
 import { api } from './api';
 import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
-import { KeyRound, X, ShieldAlert, Loader2 } from 'lucide-react';
+import { fcmService, PushNotificationItem } from './fcmService';
+import { KeyRound, X, ShieldAlert, Loader2, Bell } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'user' | 'requests' | 'admin'>('user');
@@ -59,6 +60,9 @@ export default function App() {
 
   // Help Modal
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Push Notification Toast State
+  const [pushBanner, setPushBanner] = useState<{ title: string; body: string; count?: number } | null>(null);
 
   // Phone Emulation (Mobile simulator) mode on desktop
   const [isPhoneEmulating, setIsPhoneEmulating] = useState<boolean>(() => {
@@ -116,8 +120,7 @@ export default function App() {
       setRequests(reqsRes);
       setVendedores(vendsRes);
 
-      // Se o catálogo possui menos de 10 produtos ou nunca foi sincronizado neste dispositivo,
-      // força sincronização direta do Firestore para garantir o catálogo completo (8.000+ produtos)
+      // Se o catálogo possui menos de 10 produtos ou foi identificado catálogo mais recente, força sincronização
       if (statusRes.productsCount <= 10) {
         const syncedMeta = await api.syncCatalog(true);
         setCatalogMeta(syncedMeta);
@@ -130,7 +133,7 @@ export default function App() {
     }
   }, []);
 
-  // Setup Firebase Firestore Real-Time Subscriptions
+  // Setup Firebase Firestore Real-Time Subscriptions, SSE and Focus/Visibility listeners
   useEffect(() => {
     loadInitialData();
 
@@ -139,7 +142,6 @@ export default function App() {
 
     // 1. Escuta solicitações em tempo real no Firestore
     const unsubRequests = firebaseService.subscribeToRequests((liveRequests) => {
-      console.log(`[Firebase Firestore] ${liveRequests.length} solicitações sincronizadas em tempo real`);
       setRequests(liveRequests);
       setIsRealtimeConnected(true);
       setAppInitialized(true);
@@ -159,13 +161,13 @@ export default function App() {
       }
     });
 
-    // 4. Escuta metadados do catálogo em tempo real no Firestore
+    // 4. Escuta metadados do catálogo em tempo real no Firestore (reflete novas planilhas instantaneamente)
     const unsubCatalogMeta = firebaseService.subscribeToCatalogMeta((liveMeta) => {
       if (liveMeta && liveMeta.lastUpdated) {
         setCatalogMeta(prev => {
-          if (prev.lastUpdated !== liveMeta.lastUpdated) {
-            console.log("[App] Novo lote de catálogo detectado no Firestore! Sincronizando produtos...");
-            api.syncCatalog().then(newMeta => {
+          if (prev.lastUpdated && prev.lastUpdated !== liveMeta.lastUpdated) {
+            console.log("[App] Nova versão de catálogo detectada no Firestore! Atualizando produtos...");
+            api.syncCatalog(true).then(newMeta => {
               setCatalogMeta(newMeta);
             }).catch(() => {});
           }
@@ -181,12 +183,78 @@ export default function App() {
       }
     });
 
+    // 6. Escuta eventos locais de catálogo atualizado
+    const handleLocalCatalogRefreshed = (e: any) => {
+      if (e.detail) {
+        setCatalogMeta(e.detail);
+      }
+    };
+    window.addEventListener('marsil_catalog_refreshed', handleLocalCatalogRefreshed);
+
+    // 7. Sincronização automática quando o usuário volta ao PWA / app (visibilidade ou foco)
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        api.getStatus().then(statusRes => {
+          setCatalogMeta(statusRes.catalogMeta);
+        }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    // 8. EventSource (SSE) do servidor Node para transmissão imediata
+    let sse: EventSource | null = null;
+    try {
+      sse = new EventSource('/api/events');
+      sse.addEventListener('catalog_updated', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.meta) {
+            setCatalogMeta(data.meta);
+            api.syncCatalog(true).catch(() => {});
+          }
+        } catch {}
+      });
+
+      sse.addEventListener('push_notification', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          setPushBanner({
+            title: data.title || '📦 Catálogo Marsil Atualizado!',
+            body: data.body || 'O estoque foi atualizado pelo administrador.',
+            count: data.count
+          });
+          fcmService.triggerNativeNotification(data.title, data.body);
+          api.syncCatalog(true).then(newMeta => {
+            setCatalogMeta(newMeta);
+          }).catch(() => {});
+        } catch {}
+      });
+    } catch {}
+
+    // 9. Assinatura em tempo real de Notificações Push via Firestore (universal para Web, Mobile e PWA)
+    const unsubPush = fcmService.subscribeToPushNotifications((notif) => {
+      setPushBanner({
+        title: notif.title,
+        body: notif.body,
+        count: notif.totalProducts
+      });
+      api.syncCatalog(true).then(newMeta => {
+        setCatalogMeta(newMeta);
+      }).catch(() => {});
+    });
+
     return () => {
       unsubRequests();
       unsubVendedores();
       unsubWhatsApp();
       unsubCatalogMeta();
       unsubSecurity();
+      unsubPush();
+      window.removeEventListener('marsil_catalog_refreshed', handleLocalCatalogRefreshed);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      if (sse) sse.close();
     };
   }, [loadInitialData]);
 
@@ -328,7 +396,41 @@ export default function App() {
           onOpenHelp={() => setIsHelpOpen(true)}
           isPhoneEmulating={isPhoneEmulating}
           onTogglePhoneEmulating={handleTogglePhoneEmulating}
+          activeVendor={activeVendor}
         />
+
+        {/* Banner Flutuante de Notificação Push FCM em Tempo Real */}
+        {pushBanner && (
+          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white px-4 py-3 shadow-lg flex items-center justify-between animate-in slide-in-from-top duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4 text-white animate-bounce" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm font-bold">{pushBanner.title}</p>
+                <p className="text-[11px] sm:text-xs text-blue-100">{pushBanner.body}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  setActiveTab('user');
+                  setPushBanner(null);
+                  window.dispatchEvent(new CustomEvent('marsil_catalog_refreshed'));
+                }}
+                className="px-3 py-1 bg-white text-blue-700 text-xs font-black rounded-lg shadow-sm hover:bg-blue-50 transition-colors"
+              >
+                Ver Catálogo
+              </button>
+              <button
+                onClick={() => setPushBanner(null)}
+                className="p-1 text-blue-200 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 sm:pb-24">

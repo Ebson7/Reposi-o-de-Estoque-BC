@@ -17,7 +17,7 @@ export const api = {
   }> {
     let serverRes: any = null;
     try {
-      const res = await fetch('/api/status');
+      const res = await fetch(`/api/status?_t=${Date.now()}`);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         serverRes = await res.json();
@@ -26,31 +26,33 @@ export const api = {
       // Ambiente estático / Vercel: usa Firestore e armazenamento local
     }
 
-    // Se o servidor retornou status com produtos reais (> 10)
-    if (serverRes && serverRes.productsCount > 10) {
-      return serverRes;
-    }
-
-    // Caso o servidor tenha apenas sementes ou esteja offline, busca metadados do Firestore
+    // Busca metadados em tempo real do Firestore para garantir versão mais recente
     let firestoreMeta: CatalogMeta | null = null;
     try {
       firestoreMeta = await firebaseService.getCatalogMeta();
-    } catch {
-      // Ignora erro temporário
-    }
+    } catch {}
 
     const localMeta = await localCatalogService.getMeta();
     const localProds = await localCatalogService.getProducts();
 
-    // Se o Firestore tem catálogo real (> 10) e o cliente ainda não baixou, sincroniza em segundo plano
-    if (firestoreMeta && firestoreMeta.totalProducts > 10 && localProds.length <= 10) {
+    const latestMeta = (firestoreMeta && firestoreMeta.totalProducts > 0 && (!serverRes || !serverRes.catalogMeta || new Date(firestoreMeta.lastUpdated).getTime() >= new Date(serverRes.catalogMeta.lastUpdated || 0).getTime()))
+      ? firestoreMeta
+      : (serverRes?.catalogMeta || firestoreMeta || localMeta || DEFAULT_CATALOG_META);
+
+    // Se o catálogo remoto (Firestore ou Servidor) tem uma versão mais recente que a local do dispositivo, sincroniza
+    const needsSync = latestMeta && latestMeta.totalProducts > 0 && (
+      localProds.length <= 10 || 
+      (localMeta?.lastUpdated && latestMeta.lastUpdated && latestMeta.lastUpdated !== localMeta.lastUpdated)
+    );
+
+    if (needsSync) {
       this.syncCatalog(true).catch(() => {});
     }
 
     return {
       status: 'online',
-      productsCount: firestoreMeta?.totalProducts || localProds.length || serverRes?.productsCount || 0,
-      catalogMeta: firestoreMeta || serverRes?.catalogMeta || localMeta || DEFAULT_CATALOG_META,
+      productsCount: latestMeta?.totalProducts || serverRes?.productsCount || localProds.length || 0,
+      catalogMeta: latestMeta,
       whatsappConfig: serverRes?.whatsappConfig || DEFAULT_WHATSAPP_CONFIG,
       vendedores: serverRes?.vendedores || DEFAULT_VENDEDORES,
       pendingRequestsCount: serverRes?.pendingRequestsCount || 0
@@ -61,9 +63,9 @@ export const api = {
    * Força sincronização ativa do catálogo a partir do Firestore / Servidor
    */
   async syncCatalog(force = false): Promise<CatalogMeta> {
-    // 1. Tenta acionar o servidor Node para garantir que o backend sincronizou do Firestore
+    // 1. Tenta acionar o servidor Node para garantir que o backend também sincronizou do Firestore
     try {
-      await fetch('/api/sync', { method: 'POST' });
+      await fetch(`/api/sync?_t=${Date.now()}`, { method: 'POST' });
     } catch {
       // Backend offline ou ambiente estático
     }
@@ -76,8 +78,8 @@ export const api = {
 
       const shouldDownload = force || localProds.length <= 10 || (meta.lastUpdated && meta.lastUpdated !== localMeta?.lastUpdated);
 
-      if (shouldDownload) {
-        console.log('[API] Baixando chunks atualizados do Firestore para sincronização client-side...');
+      if (shouldDownload && meta.totalProducts > 0) {
+        console.log('[API] Baixando catálogo atualizado do Firestore para sincronização client-side...');
         const firestoreProds = await firebaseService.getProductsFromFirestore();
         if (firestoreProds && firestoreProds.length > 0) {
           let comMarsil = 0;
@@ -98,6 +100,12 @@ export const api = {
             itensZerados: zerados
           };
           await localCatalogService.setCatalog(firestoreProds, fullMeta);
+          
+          // Dispara evento para atualização imediata na interface sem necessidade de F5
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('marsil_catalog_refreshed', { detail: fullMeta }));
+          }
+
           return fullMeta;
         }
       }
@@ -112,7 +120,7 @@ export const api = {
 
   /**
    * Consulta de produtos com busca, filtros e paginação
-   * Funciona perfeitamente tanto com backend Node quanto no Vercel (via IndexedDB e Firestore)
+   * Funciona com servidor Node, PWA e Vercel (via IndexedDB e Firestore)
    */
   async queryProducts(params: ProductQueryParams): Promise<PaginatedProductsResponse> {
     const query = new URLSearchParams();
@@ -122,6 +130,7 @@ export const api = {
     if (params.estoque) query.set('estoque', params.estoque);
     if (params.page) query.set('page', String(params.page));
     if (params.limit) query.set('limit', String(params.limit));
+    query.set('_t', String(Date.now())); // Anti-cache para PWA e links móveis
 
     try {
       const res = await fetch(`/api/products?${query.toString()}`);
@@ -170,7 +179,7 @@ export const api = {
    */
   async getProductByCode(code: string): Promise<{ product: Product; recentRequests: StockRequest[] }> {
     try {
-      const res = await fetch(`/api/products/code/${encodeURIComponent(code)}`);
+      const res = await fetch(`/api/products/code/${encodeURIComponent(code)}?_t=${Date.now()}`);
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         return await res.json();
@@ -188,8 +197,8 @@ export const api = {
 
   /**
    * Carga em lote de planilha / CSV / Excel
-   * 100% Funcional na Vercel: Processa client-side de forma ultra-rápida,
-   * grava no Firebase Firestore para todos os dispositivos e no cache local
+   * Processa imediatamente, salva no IndexedDB, sincroniza com Firebase Firestore
+   * e envia TODOS os dados para o servidor Node
    */
   async uploadBatch(
     csvTextOrData: string | ArrayBuffer | { csvText?: string; items?: Product[]; sourceName?: string },
@@ -232,31 +241,36 @@ export const api = {
       parsedMeta = res.meta;
     }
 
-    // 1. Salva imediatamente no IndexedDB local para busca em tempo real sem latência
+    // 1. Salva imediatamente no IndexedDB local para busca sem latência no dispositivo atual
     await localCatalogService.setCatalog(parsedProducts, parsedMeta);
 
-    // 2. Persiste no Firebase Firestore para sincronização com todos os smartphones e equipe
+    // 2. Persiste no Firebase Firestore para sincronização ultrarrápida com todos os usuários/PWA
     try {
       await firebaseService.saveProductsToFirestore(parsedProducts, parsedMeta);
     } catch (err: any) {
       console.warn('[Firebase] Aviso ao persistir no Firestore:', err.message);
     }
 
-    // 3. Notifica o backend Node caso esteja rodando (em containers/Docker/Cloud Run)
+    // 3. Atualiza o backend Node com TODOS os produtos (sem truncar) e aguarda confirmação
     if (typeof window !== 'undefined') {
       try {
         const bodyPayload = typeof csvTextOrData === 'string'
           ? { csvText: csvTextOrData, sourceName }
-          : { items: parsedProducts.slice(0, 1000), sourceName };
+          : { items: parsedProducts, sourceName };
 
-        fetch('/api/products/batch', {
+        await fetch('/api/products/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyPayload)
-        }).catch(() => {});
-      } catch {
-        // Ignora silenciosamente em ambiente serverless/Vercel
+        });
+      } catch (err: any) {
+        console.warn('[Server] Aviso ao enviar produtos ao servidor Node:', err.message);
       }
+    }
+
+    // 4. Notifica a aplicação local para atualizar a visualização imediatamente
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('marsil_catalog_refreshed', { detail: parsedMeta }));
     }
 
     return {

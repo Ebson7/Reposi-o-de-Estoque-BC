@@ -285,6 +285,15 @@ export const UserPortal: React.FC<UserPortalProps> = ({
     return () => clearTimeout(timer);
   }, [runSearch]);
 
+  // Escuta evento de sincronização imediata de novo catálogo
+  useEffect(() => {
+    const handleRefreshed = () => {
+      runSearch(currentPage || 1);
+    };
+    window.addEventListener('marsil_catalog_refreshed', handleRefreshed);
+    return () => window.removeEventListener('marsil_catalog_refreshed', handleRefreshed);
+  }, [runSearch, currentPage]);
+
   // Handle Smart AI Search
   const handleAiSearch = async (e: React.FormEvent) => {
     e.preventDefault();

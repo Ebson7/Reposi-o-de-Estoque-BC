@@ -52,6 +52,23 @@ async function startServer() {
     }
   });
 
+  // Disparo e retransmissão de notificação push aos clientes conectados
+  app.post("/api/notify-push", (req, res) => {
+    try {
+      const { title, body, count, lastUpdated } = req.body || {};
+      store.broadcast('push_notification', {
+        title: title || '📦 Catálogo Marsil Atualizado!',
+        body: body || 'O estoque foi atualizado pelo administrador.',
+        count: count || store.getAppState().productsCount,
+        lastUpdated: lastUpdated || new Date().toISOString(),
+        time: new Date().toISOString()
+      });
+      res.json({ success: true, message: 'Notificação push transmitida com sucesso!' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ==========================================
   // 3. CONSULTA DE PRODUTOS (ALTA PERFORMANCE)
   // ==========================================

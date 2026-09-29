@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
 import { Product, StockRequest, WhatsAppConfig, CatalogMeta, ProductQueryParams, PaginatedProductsResponse, CreateOrderPayload, OrderItem, GroupedOrder } from '../types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -233,10 +233,10 @@ class CentralStore {
     this.syncWithFirestore().catch((err) => {
       console.warn("[Store] Erro ao sincronizar catálogo do Firestore na inicialização:", err);
     });
-    // Verifica atualizações no Firestore a cada 45 segundos
+    // Verificação de segurança a cada 30 segundos
     setInterval(() => {
       this.syncWithFirestore().catch(() => {});
-    }, 45 * 1000);
+    }, 30 * 1000);
   }
 
   private initFirestore(): void {
@@ -249,6 +249,24 @@ class CentralStore {
           ? getFirestore(app, config.firestoreDatabaseId)
           : getFirestore(app);
         console.log('[Store] Firebase Firestore conectado com sucesso no servidor Node.');
+
+        // Escuta em tempo real alterações de catálogo no Firestore
+        try {
+          const metaRef = doc(this.firestoreDb, 'config', 'catalogMeta');
+          onSnapshot(metaRef, (snap) => {
+            if (snap.exists()) {
+              const remote = snap.data() as CatalogMeta;
+              if (remote.lastUpdated && remote.lastUpdated !== this.catalogMeta?.lastUpdated) {
+                console.log(`[Store] Notificação instantânea do Firestore: novo catálogo disponível (${remote.lastUpdated}). Sincronizando...`);
+                this.syncWithFirestore(true).catch(() => {});
+              }
+            }
+          }, (err) => {
+            console.warn('[Store] Aviso no listener de Firestore:', err.message);
+          });
+        } catch (e: any) {
+          console.warn('[Store] Falha ao configurar onSnapshot no servidor:', e.message);
+        }
       }
     } catch (e: any) {
       console.warn('[Store] Falha ao conectar Firestore no servidor:', e.message);
@@ -275,19 +293,33 @@ class CentralStore {
       const remoteLastUpdated = remoteMeta.lastUpdated || '';
       const localLastUpdated = this.catalogMeta?.lastUpdated || '';
 
-      // Sincroniza se:
-      // 1. Forçado explicitamente (force = true)
-      // 2. O catálogo em memória possui menos de 10 produtos (apenas sementes)
-      // 3. A data do Firestore é diferente/mais recente que a local
       const shouldSync = force || this.products.length <= 10 || (remoteLastUpdated && remoteLastUpdated !== localLastUpdated);
 
       if (shouldSync) {
         console.log(`[Store] Sincronizando catálogo do Firestore (Remoto: ${remoteMeta.totalProducts} produtos, Atualizado em: ${remoteLastUpdated})...`);
+
+        let targetChunks = 0;
+        try {
+          const metaChunksRef = doc(this.firestoreDb, 'config', 'chunks_meta');
+          const metaChunksSnap = await getDoc(metaChunksRef);
+          if (metaChunksSnap.exists()) {
+            targetChunks = Number(metaChunksSnap.data().totalChunks) || 0;
+          }
+        } catch {}
+
         const chunksCol = collection(this.firestoreDb, 'catalog_chunks');
         const chunksSnap = await getDocs(chunksCol);
 
         if (!chunksSnap.empty) {
-          const sortedDocs = chunksSnap.docs.sort((a, b) => (a.data().index ?? 0) - (b.data().index ?? 0));
+          let validDocs = chunksSnap.docs;
+          if (targetChunks > 0) {
+            validDocs = validDocs.filter(d => {
+              const idx = d.data().index;
+              return typeof idx === 'number' && idx < targetChunks;
+            });
+          }
+
+          const sortedDocs = validDocs.sort((a, b) => (a.data().index ?? 0) - (b.data().index ?? 0));
           const allProds: Product[] = [];
           for (const d of sortedDocs) {
             const data = d.data();
@@ -300,7 +332,8 @@ class CentralStore {
             this.products = allProds.map(p => this.calculateProductMetrics(p));
             this.catalogMeta = {
               ...remoteMeta,
-              totalProducts: this.products.length
+              totalProducts: this.products.length,
+              lastUpdated: remoteLastUpdated
             };
             this.saveToDisk();
             this.broadcast('catalog_updated', { meta: this.catalogMeta, count: this.products.length });
@@ -316,6 +349,67 @@ class CentralStore {
       this.isSyncingFirestore = false;
     }
     return false;
+  }
+
+  public async saveCatalogToFirestore(): Promise<void> {
+    if (!this.firestoreDb) {
+      this.initFirestore();
+    }
+    if (!this.firestoreDb || this.products.length === 0) return;
+
+    try {
+      console.log(`[Store] Persistindo catálogo de ${this.products.length} produtos no Firestore...`);
+      const CHUNK_SIZE = 400;
+      const totalChunks = Math.ceil(this.products.length / CHUNK_SIZE);
+      const nowIso = this.catalogMeta.lastUpdated || new Date().toISOString();
+
+      let previousTotalChunks = 0;
+      try {
+        const prevMetaRef = doc(this.firestoreDb, 'config', 'chunks_meta');
+        const prevSnap = await getDoc(prevMetaRef);
+        if (prevSnap.exists()) {
+          previousTotalChunks = Number(prevSnap.data().totalChunks) || 0;
+        }
+      } catch {}
+
+      const batch = writeBatch(this.firestoreDb);
+
+      const metaRef = doc(this.firestoreDb, 'config', 'catalogMeta');
+      batch.set(metaRef, {
+        ...this.catalogMeta,
+        lastUpdated: nowIso
+      }, { merge: true });
+
+      const metaChunksRef = doc(this.firestoreDb, 'config', 'chunks_meta');
+      batch.set(metaChunksRef, {
+        totalChunks,
+        totalProducts: this.products.length,
+        updatedAt: nowIso
+      }, { merge: true });
+
+      for (let c = 0; c < totalChunks; c++) {
+        const slice = this.products.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+        const chunkDocRef = doc(this.firestoreDb, 'catalog_chunks', `chunk_${c}`);
+        batch.set(chunkDocRef, {
+          items: slice,
+          index: c,
+          count: slice.length,
+          updatedAt: nowIso
+        });
+      }
+
+      if (previousTotalChunks > totalChunks) {
+        for (let c = totalChunks; c < previousTotalChunks; c++) {
+          const obsoleteDocRef = doc(this.firestoreDb, 'catalog_chunks', `chunk_${c}`);
+          batch.delete(obsoleteDocRef);
+        }
+      }
+
+      await batch.commit();
+      console.log(`[Store] ✅ Catálogo de ${this.products.length} produtos persistido com sucesso no Firestore pelo servidor!`);
+    } catch (err: any) {
+      console.warn('[Store] Erro ao persistir catálogo no Firestore:', err.message);
+    }
   }
 
   private ensureDataDirectory(): void {
@@ -848,6 +942,10 @@ class CentralStore {
     this.products = newProducts;
     this.refreshCatalogMeta(sourceName);
     this.saveToDisk();
+    // Persiste instantaneamente no Firestore
+    this.saveCatalogToFirestore().catch((err) => {
+      console.warn('[Batch Import] Aviso ao persistir catálogo no Firestore:', err.message);
+    });
 
     // Notificar clientes em tempo real via SSE
     this.broadcast('catalog_updated', {
@@ -874,6 +972,10 @@ class CentralStore {
 
     this.refreshCatalogMeta(sourceName);
     this.saveToDisk();
+    // Persiste instantaneamente no Firestore
+    this.saveCatalogToFirestore().catch((err) => {
+      console.warn('[Batch Import Direct] Aviso ao persistir catálogo no Firestore:', err.message);
+    });
 
     this.broadcast('catalog_updated', {
       meta: this.catalogMeta,
