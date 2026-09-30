@@ -1,6 +1,7 @@
 import { registerSW } from 'virtual:pwa-register';
 
 let updateSWInstance: ((reloadPage?: boolean) => Promise<void>) | null = null;
+let currentRegistration: ServiceWorkerRegistration | null = null;
 
 export function initPwaUpdateManager() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
@@ -12,6 +13,7 @@ export function initPwaUpdateManager() {
       immediate: true,
       onNeedRefresh() {
         console.log('[PWA] Nova versão detectada! Atualizando imediatamente...');
+        window.dispatchEvent(new CustomEvent('pwa_update_available'));
         if (updateSWInstance) {
           updateSWInstance(true);
         }
@@ -21,13 +23,13 @@ export function initPwaUpdateManager() {
       },
       onRegisteredSW(swUrl, registration) {
         if (!registration) return;
-
+        currentRegistration = registration;
         console.log('[PWA] Service Worker registrado em:', swUrl);
 
-        // Verifica novas versões a cada 45 segundos em segundo plano
+        // Verifica novas versões a cada 30 segundos em segundo plano
         setInterval(() => {
           registration.update().catch((err) => console.warn('[PWA] Erro na verificação periódica:', err));
-        }, 45 * 1000);
+        }, 30 * 1000);
 
         // Verifica imediatamente quando a aba ou app volta ao primeiro plano (visibilidade)
         document.addEventListener('visibilitychange', () => {
@@ -38,6 +40,11 @@ export function initPwaUpdateManager() {
 
         // Verifica quando a conexão de rede é restabelecida
         window.addEventListener('online', () => {
+          registration.update().catch(() => {});
+        });
+
+        // Verifica ao focar a janela
+        window.addEventListener('focus', () => {
           registration.update().catch(() => {});
         });
       }
@@ -54,6 +61,29 @@ export function initPwaUpdateManager() {
     });
   } catch (err) {
     console.warn('[PWA] Não foi possível registrar gerenciador PWA:', err);
+  }
+}
+
+/**
+ * Força verificação ativa de atualização agora
+ */
+export async function checkForAppUpdate(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    if (currentRegistration) {
+      await currentRegistration.update();
+    } else if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        currentRegistration = reg;
+        await reg.update();
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('[PWA] Erro ao verificar atualização:', err);
+    return false;
   }
 }
 
@@ -78,7 +108,7 @@ export async function forceAppFullUpdate(): Promise<void> {
   } catch (err) {
     console.warn('[PWA] Erro ao limpar caches:', err);
   } finally {
-    // Força recarregamento do servidor
-    window.location.href = window.location.origin + window.location.pathname + '?v=' + Date.now();
+    // Força recarregamento direto do servidor sem cache
+    window.location.href = window.location.origin + window.location.pathname + '?_v=' + Date.now();
   }
 }

@@ -14,8 +14,10 @@ import {
   KeyRound, 
   Copy,
   ChevronRight,
-  BookOpen
+  BookOpen,
+  RefreshCw
 } from 'lucide-react';
+import { forceAppFullUpdate } from '../pwaManager';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -285,6 +287,25 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, isAdmin =
                 <p className="text-xs text-slate-600 dark:text-slate-400 pl-5">
                   No topo da tela, clique no botão <strong>"Admin"</strong> (ícone de chave). Insira a senha administrativa para acessar o controle de solicitações, upload em lote do catálogo Excel/CSV e cadastro de vendedores.
                 </p>
+              </div>
+
+              {/* Solução de Problemas / Forçar Atualização */}
+              <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/30 space-y-2.5">
+                <h4 className="font-bold text-xs text-blue-900 dark:text-blue-200 flex items-center space-x-1.5">
+                  <RefreshCw className="w-4 h-4 text-blue-600" />
+                  <span>O aplicativo ou o estoque não parecem atualizados no seu aparelho?</span>
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  O aplicativo possui atualização automática em tempo real. Se o navegador do seu celular reteve uma versão antiga em cache, você pode forçar uma limpeza completa e recarregar a versão mais recente com um clique:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => forceAppFullUpdate()}
+                  className="inline-flex items-center space-x-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Limpar Caches e Forçar Atualização do App</span>
+                </button>
               </div>
 
             </div>

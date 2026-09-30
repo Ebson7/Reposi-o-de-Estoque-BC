@@ -14,7 +14,8 @@ import { AppState, StockRequest, CatalogMeta, WhatsAppConfig, SecurityConfig, Cr
 import { api } from './api';
 import { firebaseService, DEFAULT_SECURITY_CONFIG } from './firebaseService';
 import { fcmService, PushNotificationItem } from './fcmService';
-import { KeyRound, X, ShieldAlert, Loader2, Bell } from 'lucide-react';
+import { forceAppFullUpdate, checkForAppUpdate } from './pwaManager';
+import { KeyRound, X, ShieldAlert, Loader2, Bell, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'user' | 'requests' | 'admin'>('user');
@@ -63,6 +64,9 @@ export default function App() {
 
   // Push Notification Toast State
   const [pushBanner, setPushBanner] = useState<{ title: string; body: string; count?: number } | null>(null);
+
+  // PWA New Code Version Update State
+  const [hasAppUpdate, setHasAppUpdate] = useState(false);
 
   // Phone Emulation (Mobile simulator) mode on desktop
   const [isPhoneEmulating, setIsPhoneEmulating] = useState<boolean>(() => {
@@ -244,6 +248,13 @@ export default function App() {
       }).catch(() => {});
     });
 
+    // 10. Escuta evento de nova versão do Service Worker / PWA
+    const handlePwaUpdateAvailable = () => {
+      console.log('[App] Notificação recebida: nova versão do aplicativo instalada!');
+      setHasAppUpdate(true);
+    };
+    window.addEventListener('pwa_update_available', handlePwaUpdateAvailable);
+
     return () => {
       unsubRequests();
       unsubVendedores();
@@ -252,11 +263,26 @@ export default function App() {
       unsubSecurity();
       unsubPush();
       window.removeEventListener('marsil_catalog_refreshed', handleLocalCatalogRefreshed);
+      window.removeEventListener('pwa_update_available', handlePwaUpdateAvailable);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       if (sse) sse.close();
     };
   }, [loadInitialData]);
+
+  // Recarga manual completa de catálogo, pedidos e verificação de nova versão do aplicativo
+  const handleManualFullRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.allSettled([
+        loadInitialData(),
+        api.syncCatalog(true),
+        checkForAppUpdate()
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Garante que o usuário padrão (vendor) permaneça estritamente na tela de Consulta
   useEffect(() => {
@@ -391,13 +417,46 @@ export default function App() {
           catalogMeta={catalogMeta}
           isRealtimeConnected={isRealtimeConnected}
           pendingRequestsCount={requests.filter(r => r.status === 'Pendente').length}
-          onManualRefresh={loadInitialData}
+          onManualRefresh={handleManualFullRefresh}
           isRefreshing={isRefreshing}
           onOpenHelp={() => setIsHelpOpen(true)}
           isPhoneEmulating={isPhoneEmulating}
           onTogglePhoneEmulating={handleTogglePhoneEmulating}
           activeVendor={activeVendor}
         />
+
+        {/* Banner de Nova Versão da Aplicação (PWA / Code Update) */}
+        {hasAppUpdate && (
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white px-4 py-3 shadow-lg flex items-center justify-between animate-in slide-in-from-top duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4 text-white animate-spin" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm font-bold">Nova versão do aplicativo disponível!</p>
+                <p className="text-[11px] sm:text-xs text-emerald-100">
+                  Uma atualização do sistema foi detectada. Clique para carregar as melhorias agora.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => forceAppFullUpdate()}
+                className="px-3 py-1.5 bg-white text-emerald-700 text-xs font-black rounded-lg shadow-sm hover:bg-emerald-50 transition-colors flex items-center space-x-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Atualizar Agora</span>
+              </button>
+              <button
+                onClick={() => setHasAppUpdate(false)}
+                className="p-1 text-emerald-200 hover:text-white transition-colors"
+                title="Fechar aviso"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Banner Flutuante de Notificação Push FCM em Tempo Real */}
         {pushBanner && (

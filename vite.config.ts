@@ -47,11 +47,11 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallbackDenylist: [/^\/api/, /.*sw\.js/, /.*firebase-messaging-sw\.js/],
         runtimeCaching: [
           {
-            // Nunca cachear chamadas de API do servidor
-            urlPattern: /^\/api\/.*/i,
+            // Nunca cachear chamadas de API do servidor nem scripts de service worker
+            urlPattern: /^\/api\/.*|.*sw\.js.*|.*firebase-messaging-sw\.js.*|.*manifest.*/i,
             handler: 'NetworkOnly',
           },
           {

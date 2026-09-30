@@ -6,16 +6,28 @@ import { GoogleGenAI, Type } from "@google/genai";
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const APP_VERSION = "2.2.0";
+  const SERVER_START_TIME = new Date().toISOString();
 
   // Suporte a payloads grandes para cargas em lote de até 50MB (mais de 100.000 linhas)
   app.use(express.json({ limit: "50mb" }));
   app.use(express.text({ limit: "50mb", type: ["text/*", "application/csv"] }));
 
-  // Middleware anti-cache estrito para todas as chamadas de API (evita respostas defasadas no PWA/links)
-  app.use("/api", (req, res, next) => {
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
+  // Middleware anti-cache global para rotas de HTML, SW, manifestos e API
+  app.use((req, res, next) => {
+    const p = req.path.toLowerCase();
+    if (
+      p.startsWith('/api') ||
+      p === '/' ||
+      p.endsWith('.html') ||
+      p.includes('sw.js') ||
+      p.includes('firebase-messaging-sw') ||
+      p.includes('manifest')
+    ) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
     next();
   });
 
@@ -32,8 +44,19 @@ async function startServer() {
   app.get("/api/status", (req, res) => {
     res.json({
       status: "online",
+      version: APP_VERSION,
+      serverStartTime: SERVER_START_TIME,
       time: new Date().toISOString(),
       ...store.getAppState()
+    });
+  });
+
+  app.get("/api/version", (req, res) => {
+    res.json({
+      version: APP_VERSION,
+      serverStartTime: SERVER_START_TIME,
+      catalogLastUpdated: store.getAppState().catalogMeta?.lastUpdated,
+      productsCount: store.getAppState().productsCount
     });
   });
 
